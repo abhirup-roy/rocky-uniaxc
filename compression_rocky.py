@@ -62,6 +62,10 @@ class UniaxialCompression:
         self._setup()
         self._load_meshes()
         self._set_materials()
+        self._set_particle_size()
+        self._domain_settings()
+        self._insertion_settings()
+        self._compress_wall()
 
     def _setup(self):
         """
