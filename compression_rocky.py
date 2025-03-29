@@ -3,6 +3,7 @@
 # Author: Abhirup Roy
 
 import os
+import warnings
 import numpy as np
 import ansys.rocky.core as pyrocky
 
@@ -41,7 +42,11 @@ class UniaxialCompression:
             The length of the particle box in meters. Default is 0.01 m.
 
         """
-        # Get the directory of thhe simulation
+        self.connection_type = kwargs.get('connection_type', 'launch')
+        self.rocky_exe = kwargs.get('rocky_exe', '/home/rocky-vm/ansys_inc/v242/rocky/bin/Rocky')
+        self.headless = bool(kwargs.get('headless', True))
+
+        # Get the directory of the simulation
         self.project_dir: str = kwargs.get('working_dir', os.getcwd())
         self.project_dir = os.path.abspath(self.project_dir)
 
@@ -55,10 +60,14 @@ class UniaxialCompression:
         self.particle_box_len: float = kwargs.get(
             'particle_box_len', 10/1000)  # m
         self.t_fill = kwargs.get('t_fill', 1)  # s
+        
+        # Attributes for easy access
+        self.meshes = {}
 
         self.compr_pressure = kwargs.get('pressure', 15e3)  # Pa
         self.t_compression = kwargs.get('t_compression', 1)  # s
         # Call the setup functions
+        print("Setting up the simulation...")
         self._setup()
         self._load_meshes()
         self._set_materials()
@@ -71,13 +80,17 @@ class UniaxialCompression:
         """
         Setup the simulation case
         """
-
-        self.rocky = pyrocky.launch_rocky(headless=True)
+        if self.connection_type == 'launch':
+            self.rocky = pyrocky.launch_rocky(headless=self.headless, rocky_exe=self.rocky_exe)
+        elif self.connection_type == 'connect':
+            # Assume Rocky is already running in Pyrocky mode (i.e run `Rocky --pyrocky`)
+            self.rocky = pyrocky.connect()
+        
         self.project = self.rocky.api.CreateProject()
         self.project.SaveProject(
             os.path.join(self.project_dir, 'uniaxial_compression.rocky')
         )
-        self.study = self.project.CreateStudy()
+        self.study = self.project.GetStudy()
         self.study.SetName('Uniaxial Compression')
 
     def _load_meshes(self):
@@ -103,16 +116,20 @@ class UniaxialCompression:
                 compr_wall2_stl_path = os.path.join(meshdir, f)
 
         # Insert compressing walls
+        # Put compressing wall 5 times the size of the particle box
         compr_wall1 = self.study.ImportWall(compr_wall1_stl_path,
                                             import_scale=1.0,
                                             convert_yz=True)[0]
         compr_wall1.SetName('Compression Wall 1')
-        compr_wall1.SetDisableTime(2, 's')
+        compr_wall1.SetTranslation([-1 + 5*self.particle_box_len, 0, 0])
+
+        # Put other compressing at edge of the particle box
         compr_wall2 = self.study.ImportWall(compr_wall2_stl_path,
                                             import_scale=1.0,
                                             convert_yz=True)[0]
         compr_wall2.SetName('Compression Wall 2')
-        compr_wall2.SetDisableTime(2, 's')
+        compr_wall2.SetTranslation([1-self.particle_box_len, 0, 0])
+
 
         # Insert insertion support meshes
         insert_base = self.study.ImportWall(base_stl_path,
@@ -153,12 +170,21 @@ class UniaxialCompression:
         insert_support4.SetTranslation([self.particle_box_len/2, 0, 0])
 
         # Insert inlet plane
-        self.insert_inlet = self.study.ImportSurface(
+        insert_inlet = self.study.ImportSurface(
             inlet_stl_path,
             import_scale=self.particle_box_len,
             convert_yz=False)[0]
-        self.insert_inlet.SetName('Insert Inlet')
+        insert_inlet.SetName('Insert Inlet')
 
+        self.meshes["insert_base"] = insert_base
+        self.meshes["insert_support1"] = insert_support1
+        self.meshes["insert_support2"] = insert_support2
+        self.meshes["insert_support3"] = insert_support3
+        self.meshes["insert_support4"] = insert_support4
+        self.meshes["insert_inlet"] = insert_inlet
+        self.meshes["compr_wall1"] = compr_wall1
+        self.meshes["compr_wall2"] = compr_wall2
+    
     def _set_materials(self):
         """
         Define the particle parameters
@@ -186,6 +212,7 @@ class UniaxialCompression:
         """
         self.particle = self.study.CreateParticle()
         size_distr_lst = self.particle.GetSizeDistributionList()
+        size_distr_lst.Clear() # clear auto-generated size distribution
 
         psd = size_distr_lst.New()
         psd.SetSize(self.p_radius, 'm')
@@ -209,19 +236,20 @@ class UniaxialCompression:
         # 0.7 is a 'max' packing fraction
         n_particles = int(fill_box_vol * 0.7 / particle_vol)
         mass_particles = particle_vol * self.p_density * n_particles
-
+        
+        insert_inlet = self.meshes["insert_inlet"]
         particle_inlet = self.study.CreateParticleInlet(
-            self.insert_inlet, self.particle
+            insert_inlet, self.particle
         )
         input_property_lst = particle_inlet.GetInputPropertiesList()
-        input_property_lst[0] .SetMassFlowRate(mass_particles, 'kg/s')
+        input_property_lst[0].SetMassFlowRate(mass_particles, 'kg/s')
 
         particle_inlet.SetStartTime(0)
-        particle_inlet.SetEndTime(1)
+        particle_inlet.SetStopTime(1)
         particle_inlet.DisablePeriodic()
 
     def _compress_wall(self):
-        frame_source = self.study.GetFrameSource()
+        frame_source = self.study.GetMotionFrameSource()
         compr_motion_frame = frame_source.NewFrame()
         motions = compr_motion_frame.GetMotions()
 
@@ -229,11 +257,89 @@ class UniaxialCompression:
         freebody_motion = motions.New()
         freebody_motion.SetType('Free Body Translation')
         freebody = freebody_motion.GetTypeObject()
-        freebody.SetFreeMotionDirection('Z')
+        freebody.SetFreeMotionDirection('x')
 
         # Set the compression wall motion
         force_magnitude = self.compr_pressure * self.particle_box_len**2
         force_motion = motions.New()
         force_motion.SetType('Additional Force')
         add_force = force_motion.GetTypeObject()
-        add_force.SetForceValue([0, 0, force_magnitude], 'N')
+        add_force.SetForceValue([-force_magnitude, 0, 0], 'N')
+
+        compressing_wall = self.meshes["compr_wall1"]
+        compr_motion_frame.ApplyTo(compressing_wall)
+    
+    def simulate(self, processor:str="cpu", 
+                 nproc:int=12, runtime:float=5,
+                 **kwargs):
+
+        """
+        Run the simulation with the specified parameters.
+
+        Parameters
+        ----------
+        - proc : str
+            The type of solver to use (not case-sensitive). Options are 'cpu', 'gpu', or 'multi_gpu'.
+            Default is 'cpu'.
+        - nproc : int
+            The number of processors to use. Default is 12.
+        - runtime : float
+            The total simulation time in seconds. Default is 5 seconds
+
+        Keyword Arguments
+        -----------------
+        - neighbour_search : str
+            The neighbour search model to use. Options are 'BVH', 'RegularGrid', or 'SparseGrid'.
+            Default is None.
+        - target_gpu : int|str
+            The GPU to use if the solver type is 'gpu'. Default is None.
+        - target_gpus : list
+            The GPUs to use if the solver type is 'multi_gpu'. Default is None.
+        """
+        self.solver = self.study.GetSolver()
+        self.solver.SetNumberOfProcessors(int(nproc))
+        
+        neighbour_search:str = kwargs.get('neighbour_search', None)
+        delete_results:bool = kwargs.get('delete_results', False)
+
+        # Handle the solver type - allow lowercase inputs as well
+        with processor.upper() as _proc:
+
+            if _proc in ['CPU', 'GPU', 'MULTI_GPU']:
+                self.solver.SetSimulationTarget(_proc)
+
+                if _proc == 'GPU':
+                    target_gpu: str|int = kwargs.get('target_gpu')
+                elif _proc == 'MULTI_GPU':
+                    target_gpus: list = kwargs.get('target_gpus')
+
+                    warnings.warn(
+                        "GPU solver is not fully tested yet. Use with caution."
+                    )
+
+            else:
+                raise ValueError(f"Unknown solver type: {_proc}. Use 'CPU', 'GPU', or 'MULTI_GPU'.")
+        
+        self.solver.SetSimulationDuration(runtime, 's')
+        
+        if neighbour_search:
+            if neighbour_search in['BVH', 'RegularGrid', 'SparseGrid']:
+                self.solver.SetNeighborSearchModel(neighbour_search)
+            else:
+                raise ValueError(f"Unknown neighbour search model: {neighbour_search}. Use 'BVH', 'RegularGrid', or 'SparseGrid'.")
+        print(f"Running simulation with {processor} solver.")
+        self.study.StartSimulation()
+        print("Simulation starting...")
+        while self.study.IsSimulating():
+            self.study.RefreshResults()
+            print(f"Simulation Progress: {self.study.GetProgress():.2f} %")
+        print("Simulation completed.")
+            
+
+if __name__ == "__main__":
+    uniax  = UniaxialCompression(
+        connection_type='connect',
+        headless=True
+    )
+    uniax.rocky.close()
+
