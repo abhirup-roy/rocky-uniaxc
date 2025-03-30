@@ -4,16 +4,18 @@
 
 import os
 import warnings
+
 import numpy as np
+import matplotlib.pyplot as plt
+
 import ansys.rocky.core as pyrocky
+
 
 """
 TODO:
-- Select correct compr wall coordinates
-- verify the compression direction is right
-- assign the correct material to the walls and particles
-- ensure the simulation sets up correctly
-- add functionality to run the simulation
+- Fix insertion settings
+- Check errors on BB
+- Validate results
 
 - Set up param sweep
 """
@@ -32,6 +34,12 @@ class UniaxialCompression:
         - project_dir : str
             The working directory for the simulation.
             Default is the current working directory.
+        - connection_type : str
+            The type of connection to Rocky. Options are 'launch' or 'connect'.
+            Default is 'launch'.
+        - rocky_exe : str
+            The path to the Rocky executable. Default is '/home/rocky-vm/ansys_inc/v242/rocky/bin/Rocky'.
+            For use on BlueBear the default is 'ls /rds/bear-apps/2023a/EL8-ice/software/ANSYS_Rocky/2024R2.0/bin/Rocky'.
         - radius : float
             The radius of the cylinder in meters. Default is 150e-6 m.
         - mesh_stl_names : list
@@ -63,6 +71,7 @@ class UniaxialCompression:
         
         # Attributes for easy access
         self.meshes = {}
+        self.materials = {}
 
         self.compr_pressure = kwargs.get('pressure', 15e3)  # Pa
         self.t_compression = kwargs.get('t_compression', 1)  # s
@@ -181,9 +190,9 @@ class UniaxialCompression:
         self.meshes["insert_support2"] = insert_support2
         self.meshes["insert_support3"] = insert_support3
         self.meshes["insert_support4"] = insert_support4
-        self.meshes["insert_inlet"] = insert_inlet
         self.meshes["compr_wall1"] = compr_wall1
         self.meshes["compr_wall2"] = compr_wall2
+        self.meshes["insert_inlet"] = insert_inlet
     
     def _set_materials(self):
         """
@@ -206,6 +215,14 @@ class UniaxialCompression:
         wall_mat.SetPoissonRatio(0.3)
         wall_mat.SetUseBulkDensity(False)
 
+        # Set the material for the meshes
+        for mesh in list(self.meshes.values())[:-1]:
+            mesh.SetMaterial(wall_mat)
+
+        # Save the material collection
+        self.materials["particle_mat"] = particle_mat
+        self.materials["wall_mat"] = wall_mat
+
     def _set_particle_size(self):
         """
         Set the particle size and density
@@ -217,6 +234,9 @@ class UniaxialCompression:
         psd = size_distr_lst.New()
         psd.SetSize(self.p_radius, 'm')
         psd.SetCumulativePercentage(100)
+
+        # Set the particle material
+        self.particle.SetMaterial(self.materials["particle_mat"])
 
     def _domain_settings(self):
         self.domain = self.study.GetDomainSettings()
@@ -258,6 +278,7 @@ class UniaxialCompression:
         freebody_motion.SetType('Free Body Translation')
         freebody = freebody_motion.GetTypeObject()
         freebody.SetFreeMotionDirection('x')
+        freebody_motion.SetStartTime(2)
 
         # Set the compression wall motion
         force_magnitude = self.compr_pressure * self.particle_box_len**2
@@ -265,6 +286,7 @@ class UniaxialCompression:
         force_motion.SetType('Additional Force')
         add_force = force_motion.GetTypeObject()
         add_force.SetForceValue([-force_magnitude, 0, 0], 'N')
+        force_motion.SetStartTime(2)
 
         compressing_wall = self.meshes["compr_wall1"]
         compr_motion_frame.ApplyTo(compressing_wall)
@@ -303,22 +325,22 @@ class UniaxialCompression:
         delete_results:bool = kwargs.get('delete_results', False)
 
         # Handle the solver type - allow lowercase inputs as well
-        with processor.upper() as _proc:
+        _proc = processor.upper()
 
-            if _proc in ['CPU', 'GPU', 'MULTI_GPU']:
-                self.solver.SetSimulationTarget(_proc)
+        if _proc in ['CPU', 'GPU', 'MULTI_GPU']:
+            self.solver.SetSimulationTarget(_proc)
 
-                if _proc == 'GPU':
-                    target_gpu: str|int = kwargs.get('target_gpu')
-                elif _proc == 'MULTI_GPU':
-                    target_gpus: list = kwargs.get('target_gpus')
+            if _proc == 'GPU':
+                target_gpu: str|int = kwargs.get('target_gpu')
+            elif _proc == 'MULTI_GPU':
+                target_gpus: list = kwargs.get('target_gpus')
 
-                    warnings.warn(
-                        "GPU solver is not fully tested yet. Use with caution."
-                    )
+                warnings.warn(
+                    "GPU solver is not fully tested yet. Use with caution."
+                )
 
-            else:
-                raise ValueError(f"Unknown solver type: {_proc}. Use 'CPU', 'GPU', or 'MULTI_GPU'.")
+        else:
+            raise ValueError(f"Unknown solver type: {_proc}. Use 'CPU', 'GPU', or 'MULTI_GPU'.")
         
         self.solver.SetSimulationDuration(runtime, 's')
         
@@ -327,6 +349,7 @@ class UniaxialCompression:
                 self.solver.SetNeighborSearchModel(neighbour_search)
             else:
                 raise ValueError(f"Unknown neighbour search model: {neighbour_search}. Use 'BVH', 'RegularGrid', or 'SparseGrid'.")
+        
         print(f"Running simulation with {processor} solver.")
         self.study.StartSimulation()
         print("Simulation starting...")
@@ -334,12 +357,113 @@ class UniaxialCompression:
             self.study.RefreshResults()
             print(f"Simulation Progress: {self.study.GetProgress():.2f} %")
         print("Simulation completed.")
-            
 
+def postprocess(self, **kwargs):
+    """
+    Post-process the simulation results
+    """
+    plot:bool = kwargs.get('plot', True)
+    if plot:
+        def plot_mass(t, mass, plot_name):
+            plt.plot(t, mass)
+            plt.ylabel("Mass (kg)")
+            plt.xlabel("Time (s)")
+            plt.savefig(f'plots/{plot_name}.png')
+
+
+    print("Post-processing simulation results...")
+    # Add code to post-process the simulation results here
+    # Get particle data
+    self.particles = self.study.GetParticles()
+    x = self.particles.GetGridFunction('Coordinate : X')
+
+    # Find settled time step
+    timestep = self.study.GetTimeSet()
+    settled_timestep = np.where(timestep == 2)[0][0].item()
+
+    x_arr_init = x.GetArray(time_step=settled_timestep)
+    x_max_init, x_min_init = x_arr_init.min().item(), x_arr_init.max().item()
+
+    x_arr_compr = x.GetArray(time_step=-1)
+    x_max_compr, x_min_compr = x_arr_compr.min().item(), x_arr_compr.max().item()
+
+    y = self.particles.GetGridFunction('Coordinate : Y')
+    y_arr_init = y.GetArray(time_step=settled_timestep)
+    y_max_init, y_min_init = y_arr_init.min().item(), y_arr_init.max().item()
+
+    y_arr_compr = y.GetArray(time_step=-1)
+    y_max_compr, y_min_compr = y_arr_compr.min().item(), y_arr_compr.max().item()
+
+    z = self.particles.GetGridFunction('Coordinate : Z')
+    z_arr_init = z.GetArray(time_step=settled_timestep)
+    z_max_init, z_min_init = z_arr_init.min().item(), z_arr_init.max().item()
+
+    z_arr_compr = z.GetArray(time_step=-1)
+    z_max_compr, z_min_compr = z_arr_compr.min().item(), z_arr_compr.max().item()
+
+    self.processes = self.project.GetUserProcessCollection()
+
+    cuboid_selection_init = self.processes.CreateCubeProcess(self.particles)
+
+    cuboid_selection_init.SetSize(
+        x_max_init-x_min_init,
+        y_max_init-y_min_init,
+        z_max_init-z_min_init,
+        unit="m"
+    )
+
+    cuboid_selection_init.SetCenter(
+        (x_max_init+x_min_init)/2,
+        (y_max_init+y_min_init)/2,
+        (z_max_init+z_min_init)/2,
+        unit="m"
+    )
+
+    t, mass_init = cuboid_selection_init.GetNumpyCurve('Particles Mass')
+    plot_mass(t, mass_init, "mass_init") if plot else None
+
+    cuboid_selection_compr = self.processes.CreateCubeProcess(self.particles)
+
+    cuboid_selection_compr.SetSize(
+        x_max_compr-x_min_compr,
+        y_max_compr-y_min_compr,
+        z_max_compr-z_min_compr,
+        unit="m"
+    )
+
+    cuboid_selection_init.SetCenter(
+        (x_max_compr+x_min_compr)/2,
+        (y_max_compr+y_min_compr)/2,
+        (z_max_compr+z_min_compr)/2,
+        unit="m"
+    )
+
+    t, mass_compr = cuboid_selection_compr.GetNumpyCurve('Particles Mass')
+    plot_mass(t, mass_compr, "mass_compressed") if plot else None
+
+    V_bulk = (x_max_init-x_min_init)*(y_max_init-y_min_init)*(z_max_init-z_min_init)
+    bulk_dens = np.abs(mass_init.max()/V_bulk).item()
+    print(f"Bulk density: {bulk_dens} kg/m^3")
+
+    V_packed = (x_max_compr-x_min_compr)*(y_max_compr-y_min_compr)*(z_max_compr-z_min_compr)
+    packed_dens = np.abs(mass_compr.max()/V_bulk).item()
+    print(f"Packed density: {packed_dens} kg/m^3")
+
+    hausner_ratio = bulk_dens/packed_dens
+    print("Hausner Ratio: ", hausner_ratio)
+    compr_indx = 100 * (1-packed_dens/bulk_dens)
+    print("Compressibility Index: ",compr_indx)
+
+    
 if __name__ == "__main__":
     uniax  = UniaxialCompression(
         connection_type='connect',
         headless=True
+    )
+    uniax.simulate(
+        processor='cpu',
+        nproc=10,
+        runtime=5,
     )
     uniax.rocky.close()
 
