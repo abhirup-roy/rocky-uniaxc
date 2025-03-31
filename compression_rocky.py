@@ -164,6 +164,9 @@ class UniaxialCompression:
             convert_yz=True)[0]
         particle_box.SetName('Particle Box')
         particle_box.SetDisableTime(self.t_fill+self.t_settle)
+        # Set the particle box to be shifted 1 micron up
+        # to prevent ineraction with periodic boundaries
+        particle_box.SetTranslation([0, 1e6, 0])
 
         # Insert inlet plane
         insert_inlet = self.study.ImportSurface(
@@ -455,12 +458,16 @@ class UniaxialCompression:
 
 if __name__ == "__main__":
     uniax = UniaxialCompression(
-        connection_type='connect',
+        connection_type='launch',
+        rocky_exe='BB',
         headless=True
     )
     uniax.simulate(
         processor='cpu',
         nproc=10, # cores
         runtime=5  # seconds
+    )
+    uniax.postprocess(
+        plot=True
     )
     uniax.rocky.close()
