@@ -7,9 +7,10 @@ import warnings
 
 import numpy as np
 import matplotlib.pyplot as plt
-
+# import gmsh
 import ansys.rocky.core as pyrocky
 
+from compr_meshgen import create_compr_walls, create_insert, create_particlebox
 
 """
 TODO:
@@ -121,93 +122,51 @@ class UniaxialCompression:
         self.study = self.project.GetStudy()
         self.study.SetName('Uniaxial Compression')
 
+    def _meshgen(self):
+        """
+        Generate the meshes for the simulation
+        """
+        # Create the meshes
+        create_particlebox(self.particle_box_len)
+        create_compr_walls(self.particle_box_len)
+        create_insert(self.particle_box_len)
+
     def _load_meshes(self):
         """
         Define the parameters for the simulation
         """
-        # Define abs path for the meshes
-        meshdir = os.path.join(self.project_dir, 'meshes')
-        for f in os.listdir(meshdir):
-            if f == 'insert_base.stl':
-                base_stl_path = os.path.join(meshdir, f)
-            elif f == 'insert_support1.stl':
-                support1_stl_path = os.path.join(meshdir, f)
-            elif f == 'insert_support2.stl':
-                support2_stl_path = os.path.join(meshdir, f)
-            elif f == 'insert_inlet.stl':
-                inlet_stl_path = os.path.join(meshdir, f)
-            elif f == 'square_wall_negZ.stl':
-                support3_stl_path = os.path.join(meshdir, f)
-                compr_wall1_stl_path = os.path.join(meshdir, f)
-            elif f == 'square_wall_posZ.stl':
-                support4_stl_path = os.path.join(meshdir, f)
-                compr_wall2_stl_path = os.path.join(meshdir, f)
+        compr_wall1_stl_path = os.path.join('meshes', 'compressive_wall1.stl')
+        compr_wall2_stl_path = os.path.join('meshes', 'compressive_wall2.stl')
+        inlet_stl_path = os.path.join('meshes', 'insert.stl')
+        particle_box_stl_path = os.path.join('meshes', 'particlebox.stl')
 
-        # Insert compressing walls
         # Put compressing wall 5 times the size of the particle box
         compr_wall1 = self.study.ImportWall(compr_wall1_stl_path,
                                             import_scale=1.0,
                                             convert_yz=True)[0]
         compr_wall1.SetName('Compression Wall 1')
-        compr_wall1.SetTranslation([-1 + 5*self.particle_box_len, 0, 0])
 
         # Put other compressing at edge of the particle box
         compr_wall2 = self.study.ImportWall(compr_wall2_stl_path,
                                             import_scale=1.0,
                                             convert_yz=True)[0]
         compr_wall2.SetName('Compression Wall 2')
-        compr_wall2.SetTranslation([1-self.particle_box_len, 0, 0])
 
-        # Insert insertion support meshes
-        insert_base = self.study.ImportWall(base_stl_path,
-                                            import_scale=self.particle_box_len,
-                                            convert_yz=True)[0]
-
-        insert_base.SetName('Insert Base')
-        insert_base.SetDisableTime(2, 's')
-
-        insert_support1 = self.study.ImportWall(
-            support1_stl_path,
-            import_scale=self.particle_box_len,
-            convert_yz=False)[0]
-        insert_support1.SetName('Insert Support 1')
-        insert_support1.SetDisableTime(2, 's')
-
-        insert_support2 = self.study.ImportWall(
-            support2_stl_path,
-            import_scale=self.particle_box_len,
-            convert_yz=False)[0]
-        insert_support2.SetName('Insert Support 2')
-        insert_support2.SetDisableTime(2, 's')
-
-        insert_support3 = self.study.ImportWall(
-            support3_stl_path,
+        # Insert particle box
+        particle_box = self.study.ImportSurface(
+            particle_box_stl_path,
             import_scale=self.particle_box_len,
             convert_yz=True)[0]
-        insert_support3.SetName('Insert Support 3')
-        insert_support3.SetDisableTime(2, 's')
-        insert_support3.SetTranslation([-self.particle_box_len/2, 0, 0])
-
-        insert_support4 = self.study.ImportWall(
-            support4_stl_path,
-            import_scale=self.particle_box_len,
-            convert_yz=True)[0]
-        insert_support4.SetName('Insert Support 4')
-        insert_support4.SetDisableTime(2, 's')
-        insert_support4.SetTranslation([self.particle_box_len/2, 0, 0])
+        particle_box.SetName('Particle Box')
 
         # Insert inlet plane
         insert_inlet = self.study.ImportSurface(
             inlet_stl_path,
             import_scale=self.particle_box_len,
-            convert_yz=False)[0]
+            convert_yz=True)[0]
         insert_inlet.SetName('Insert Inlet')
 
-        self.meshes["insert_base"] = insert_base
-        self.meshes["insert_support1"] = insert_support1
-        self.meshes["insert_support2"] = insert_support2
-        self.meshes["insert_support3"] = insert_support3
-        self.meshes["insert_support4"] = insert_support4
+        self.meshes["box"] = particle_box
         self.meshes["compr_wall1"] = compr_wall1
         self.meshes["compr_wall2"] = compr_wall2
         self.meshes["insert_inlet"] = insert_inlet
@@ -265,9 +224,9 @@ class UniaxialCompression:
         # no periodic in Z-direction to allow compression
         self.domain.SetCartesianPeriodicDirections('XY')
         self.domain.SetPeriodicLimitsMaxCoordinates(
-            [self.particle_box_len, self.particle_box_len, np.inf])
+            [self.particle_box_len/2, self.particle_box_len/2, np.inf])
         self.domain.SetPeriodicLimitsMinCoordinates(
-            [-self.particle_box_len, -self.particle_box_len, -np.inf])
+            [-self.particle_box_len/2, -self.particle_box_len/2, -np.inf])
 
     def _insertion_settings(self):
         fill_box_vol = self.particle_box_len**3
@@ -345,7 +304,7 @@ class UniaxialCompression:
         self.solver.SetNumberOfProcessors(int(nproc))
 
         neighbour_search: str = kwargs.get('neighbour_search', None)
-        delete_results: bool = kwargs.get('delete_results', False)
+        # delete_results: bool = kwargs.get('delete_results', False)
 
         # Handle the solver type - allow lowercase inputs as well
         _proc = processor.upper()
@@ -382,107 +341,106 @@ class UniaxialCompression:
             print(f"Simulation Progress: {self.study.GetProgress():.2f} %")
         print("Simulation completed.")
 
+    def postprocess(self, **kwargs):
+        """
+        Post-process the simulation results
+        """
+        plot: bool = kwargs.get('plot', True)
+        if plot:
+            def plot_mass(t, mass, plot_name):
+                plt.plot(t, mass)
+                plt.ylabel("Mass (kg)")
+                plt.xlabel("Time (s)")
+                plt.savefig(f'plots/{plot_name}.png')
 
-def postprocess(self, **kwargs):
-    """
-    Post-process the simulation results
-    """
-    plot: bool = kwargs.get('plot', True)
-    if plot:
-        def plot_mass(t, mass, plot_name):
-            plt.plot(t, mass)
-            plt.ylabel("Mass (kg)")
-            plt.xlabel("Time (s)")
-            plt.savefig(f'plots/{plot_name}.png')
+        print("Post-processing simulation results...")
+        # Add code to post-process the simulation results here
+        # Get particle data
+        self.particles = self.study.GetParticles()
+        x = self.particles.GetGridFunction('Coordinate : X')
 
-    print("Post-processing simulation results...")
-    # Add code to post-process the simulation results here
-    # Get particle data
-    self.particles = self.study.GetParticles()
-    x = self.particles.GetGridFunction('Coordinate : X')
+        # Find settled time step
+        timestep = self.study.GetTimeSet()
+        settled_timestep = np.where(timestep == 2)[0][0].item()
 
-    # Find settled time step
-    timestep = self.study.GetTimeSet()
-    settled_timestep = np.where(timestep == 2)[0][0].item()
+        x_arr_init = x.GetArray(time_step=settled_timestep)
+        x_max_init, x_min_init = x_arr_init.min().item(), x_arr_init.max().item()
 
-    x_arr_init = x.GetArray(time_step=settled_timestep)
-    x_max_init, x_min_init = x_arr_init.min().item(), x_arr_init.max().item()
+        x_arr_compr = x.GetArray(time_step=-1)
+        x_max_compr = x_arr_compr.min().item()
+        x_min_compr = x_arr_compr.max().item()
 
-    x_arr_compr = x.GetArray(time_step=-1)
-    x_max_compr = x_arr_compr.min().item()
-    x_min_compr = x_arr_compr.max().item()
+        y = self.particles.GetGridFunction('Coordinate : Y')
+        y_arr_init = y.GetArray(time_step=settled_timestep)
+        y_max_init, y_min_init = y_arr_init.min().item(), y_arr_init.max().item()
 
-    y = self.particles.GetGridFunction('Coordinate : Y')
-    y_arr_init = y.GetArray(time_step=settled_timestep)
-    y_max_init, y_min_init = y_arr_init.min().item(), y_arr_init.max().item()
+        y_arr_compr = y.GetArray(time_step=-1)
+        y_max_compr = y_arr_compr.min().item()
+        y_min_compr = y_arr_compr.max().item()
+        z = self.particles.GetGridFunction('Coordinate : Z')
+        z_arr_init = z.GetArray(time_step=settled_timestep)
+        z_max_init = z_arr_init.min().item()
+        z_min_init = z_arr_init.max().item()
 
-    y_arr_compr = y.GetArray(time_step=-1)
-    y_max_compr = y_arr_compr.min().item()
-    y_min_compr = y_arr_compr.max().item()
-    z = self.particles.GetGridFunction('Coordinate : Z')
-    z_arr_init = z.GetArray(time_step=settled_timestep)
-    z_max_init = z_arr_init.min().item()
-    z_min_init = z_arr_init.max().item()
+        z_arr_compr = z.GetArray(time_step=-1)
+        z_max_compr = z_arr_compr.min().item()
+        z_min_compr = z_arr_compr.max().item()
+        self.processes = self.project.GetUserProcessCollection()
 
-    z_arr_compr = z.GetArray(time_step=-1)
-    z_max_compr = z_arr_compr.min().item()
-    z_min_compr = z_arr_compr.max().item()
-    self.processes = self.project.GetUserProcessCollection()
+        cuboid_selection_init = self.processes.CreateCubeProcess(self.particles)
 
-    cuboid_selection_init = self.processes.CreateCubeProcess(self.particles)
+        cuboid_selection_init.SetSize(
+            x_max_init-x_min_init,
+            y_max_init-y_min_init,
+            z_max_init-z_min_init,
+            unit="m"
+        )
 
-    cuboid_selection_init.SetSize(
-        x_max_init-x_min_init,
-        y_max_init-y_min_init,
-        z_max_init-z_min_init,
-        unit="m"
-    )
+        cuboid_selection_init.SetCenter(
+            (x_max_init+x_min_init)/2,
+            (y_max_init+y_min_init)/2,
+            (z_max_init+z_min_init)/2,
+            unit="m"
+        )
 
-    cuboid_selection_init.SetCenter(
-        (x_max_init+x_min_init)/2,
-        (y_max_init+y_min_init)/2,
-        (z_max_init+z_min_init)/2,
-        unit="m"
-    )
+        t, mass_init = cuboid_selection_init.GetNumpyCurve('Particles Mass')
+        plot_mass(t, mass_init, "mass_init") if plot else None
 
-    t, mass_init = cuboid_selection_init.GetNumpyCurve('Particles Mass')
-    plot_mass(t, mass_init, "mass_init") if plot else None
+        cuboid_selection_compr = self.processes.CreateCubeProcess(self.particles)
 
-    cuboid_selection_compr = self.processes.CreateCubeProcess(self.particles)
+        cuboid_selection_compr.SetSize(
+            x_max_compr-x_min_compr,
+            y_max_compr-y_min_compr,
+            z_max_compr-z_min_compr,
+            unit="m"
+        )
 
-    cuboid_selection_compr.SetSize(
-        x_max_compr-x_min_compr,
-        y_max_compr-y_min_compr,
-        z_max_compr-z_min_compr,
-        unit="m"
-    )
+        cuboid_selection_init.SetCenter(
+            (x_max_compr+x_min_compr)/2,
+            (y_max_compr+y_min_compr)/2,
+            (z_max_compr+z_min_compr)/2,
+            unit="m"
+        )
 
-    cuboid_selection_init.SetCenter(
-        (x_max_compr+x_min_compr)/2,
-        (y_max_compr+y_min_compr)/2,
-        (z_max_compr+z_min_compr)/2,
-        unit="m"
-    )
+        t, mass_compr = cuboid_selection_compr.GetNumpyCurve('Particles Mass')
+        plot_mass(t, mass_compr, "mass_compressed") if plot else None
 
-    t, mass_compr = cuboid_selection_compr.GetNumpyCurve('Particles Mass')
-    plot_mass(t, mass_compr, "mass_compressed") if plot else None
+        V_bulk = (x_max_init-x_min_init
+                )*(y_max_init-y_min_init
+                    )*(z_max_init-z_min_init)
+        bulk_dens = np.abs(mass_init.max()/V_bulk).item()
+        print(f"Bulk density: {bulk_dens} kg/m^3")
 
-    V_bulk = (x_max_init-x_min_init
-              )*(y_max_init-y_min_init
-                 )*(z_max_init-z_min_init)
-    bulk_dens = np.abs(mass_init.max()/V_bulk).item()
-    print(f"Bulk density: {bulk_dens} kg/m^3")
+        V_packed = (x_max_compr-x_min_compr
+                    )*(y_max_compr-y_min_compr
+                    )*(z_max_compr-z_min_compr)
+        packed_dens = np.abs(mass_compr.max()/V_packed).item()
+        print(f"Packed density: {packed_dens} kg/m^3")
 
-    V_packed = (x_max_compr-x_min_compr
-                )*(y_max_compr-y_min_compr
-                   )*(z_max_compr-z_min_compr)
-    packed_dens = np.abs(mass_compr.max()/V_packed).item()
-    print(f"Packed density: {packed_dens} kg/m^3")
-
-    hausner_ratio = bulk_dens/packed_dens
-    print("Hausner Ratio: ", hausner_ratio)
-    compr_indx = 100 * (1-packed_dens/bulk_dens)
-    print("Compressibility Index: ", compr_indx)
+        hausner_ratio = bulk_dens/packed_dens
+        print("Hausner Ratio: ", hausner_ratio)
+        compr_indx = 100 * (1-packed_dens/bulk_dens)
+        print("Compressibility Index: ", compr_indx)
 
 
 if __name__ == "__main__":
