@@ -61,7 +61,9 @@ class UniaxialCompression:
         elif self.rocky_exe == 'VM':
             self.rocky_exe = '/home/rocky-vm/ansys_inc/v242/rocky/bin/Rocky'
         else:
-            if not os.path.exists(self.rocky_exe):
+            if not self.rocky_exe:
+                pass
+            elif not os.path.exists(self.rocky_exe):
                 raise FileNotFoundError(
                     f"Rocky executable not found at {self.rocky_exe}.",
                     "Please provide a valid path."
@@ -83,8 +85,8 @@ class UniaxialCompression:
         # Filling parameters
         self.particle_box_len: float = kwargs.get(
             'particle_box_len', 10/1000)  # m
-        self.t_fill = kwargs.get('t_fill', 1)  # s
-
+        self.t_fill = kwargs.get('t_fill', 3)  # s
+        self.t_settle = kwargs.get('t_settle', 1)  # s
         # Attributes for easy access
         self.meshes = {}
         self.materials = {}
@@ -93,6 +95,7 @@ class UniaxialCompression:
         self.t_compression = kwargs.get('t_compression', 1)  # s
         # Call the setup functions
         print("Setting up the simulation...")
+        self._meshgen()
         self._setup()
         self._load_meshes()
         self._set_materials()
@@ -135,12 +138,13 @@ class UniaxialCompression:
         """
         Define the parameters for the simulation
         """
-        compr_wall1_stl_path = os.path.join('meshes', 'compressive_wall1.stl')
-        compr_wall2_stl_path = os.path.join('meshes', 'compressive_wall2.stl')
-        inlet_stl_path = os.path.join('meshes', 'insert.stl')
-        particle_box_stl_path = os.path.join('meshes', 'particlebox.stl')
+        meshdir = os.path.abspath('meshes')
+        compr_wall1_stl_path = os.path.join(meshdir, 'compressive_wall1.stl')
+        compr_wall2_stl_path = os.path.join(meshdir, 'compressive_wall2.stl')
+        inlet_stl_path = os.path.join(meshdir, 'insert.stl')
+        particle_box_stl_path = os.path.join(meshdir, 'particlebox.stl')
 
-        # Put compressing wall 5 times the size of the particle box
+        # Put compressing wall 0.5 times the size of the particle box
         compr_wall1 = self.study.ImportWall(compr_wall1_stl_path,
                                             import_scale=1.0,
                                             convert_yz=True)[0]
@@ -151,18 +155,20 @@ class UniaxialCompression:
                                             import_scale=1.0,
                                             convert_yz=True)[0]
         compr_wall2.SetName('Compression Wall 2')
+        compr_wall2.SetTranslation([self.particle_box_len/2, 0, 0])
 
         # Insert particle box
-        particle_box = self.study.ImportSurface(
+        particle_box = self.study.ImportWall(
             particle_box_stl_path,
-            import_scale=self.particle_box_len,
+            import_scale=1.0,
             convert_yz=True)[0]
         particle_box.SetName('Particle Box')
+        particle_box.SetDisableTime(self.t_fill+self.t_settle)
 
         # Insert inlet plane
         insert_inlet = self.study.ImportSurface(
             inlet_stl_path,
-            import_scale=self.particle_box_len,
+            import_scale=1.0,
             convert_yz=True)[0]
         insert_inlet.SetName('Insert Inlet')
 
@@ -193,6 +199,7 @@ class UniaxialCompression:
         wall_mat.SetUseBulkDensity(False)
 
         # Set the material for the meshes
+        print(self.meshes.keys())
         for mesh in list(self.meshes.values())[:-1]:
             mesh.SetMaterial(wall_mat)
 
@@ -218,7 +225,7 @@ class UniaxialCompression:
     def _domain_settings(self):
         self.domain = self.study.GetDomainSettings()
         self.domain.SetDomainType('CARTESIAN')
-        self.domain.EnableUseBoundaryLimits(True)
+        self.domain.EnableUseBoundaryLimits()
         self.domain.DisablePeriodicAtGeometryLimits()
         # Set periodic limits in X and Y directions
         # no periodic in Z-direction to allow compression
@@ -231,19 +238,22 @@ class UniaxialCompression:
     def _insertion_settings(self):
         fill_box_vol = self.particle_box_len**3
         particle_vol = (4/3) * np.pi * self.p_radius**3
-        # 0.7 is a 'max' packing fraction
-        n_particles = int(fill_box_vol * 0.7 / particle_vol)
+        # 0.74 is a max vol fraction of spjereical particles
+        n_particles = np.rint(
+            fill_box_vol * 0.74 / particle_vol
+            ).astype(int).item()
         mass_particles = particle_vol * self.p_density * n_particles
+        flowr = mass_particles / self.t_fill
 
         insert_inlet = self.meshes["insert_inlet"]
         particle_inlet = self.study.CreateParticleInlet(
             insert_inlet, self.particle
         )
         input_property_lst = particle_inlet.GetInputPropertiesList()
-        input_property_lst[0].SetMassFlowRate(mass_particles, 'kg/s')
+        input_property_lst[0].SetMassFlowRate(flowr, 'kg/s')
 
         particle_inlet.SetStartTime(0)
-        particle_inlet.SetStopTime(1)
+        particle_inlet.SetStopTime(self.t_fill)
         particle_inlet.DisablePeriodic()
 
     def _compress_wall(self):
@@ -450,7 +460,7 @@ if __name__ == "__main__":
     )
     uniax.simulate(
         processor='cpu',
-        nproc=10,
-        runtime=5,
+        nproc=10, # cores
+        runtime=5  # seconds
     )
     uniax.rocky.close()
