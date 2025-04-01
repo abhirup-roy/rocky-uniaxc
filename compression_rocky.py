@@ -155,7 +155,7 @@ class UniaxialCompression:
                                             import_scale=1.0,
                                             convert_yz=True)[0]
         compr_wall2.SetName('Compression Wall 2')
-        compr_wall2.SetTranslation([self.particle_box_len/2, 0, 0])
+        compr_wall2.SetTranslation([self.particle_box_len/2 + 1e-6, 0, 0])
 
         # Insert particle box
         particle_box = self.study.ImportWall(
@@ -166,7 +166,7 @@ class UniaxialCompression:
         particle_box.SetDisableTime(self.t_fill+self.t_settle)
         # Set the particle box to be shifted 1 micron up
         # to prevent ineraction with periodic boundaries
-        particle_box.SetTranslation([0, 1e6, 0])
+        particle_box.SetTranslation([0, 1e-6, 0])
 
         # Insert inlet plane
         insert_inlet = self.study.ImportSurface(
@@ -463,7 +463,7 @@ if __name__ == "__main__":
         headless=True
     )
     uniax.simulate(
-        processor='cpu',
+        processor='cpu',        
         nproc=10, # cores
         runtime=5  # seconds
     )
