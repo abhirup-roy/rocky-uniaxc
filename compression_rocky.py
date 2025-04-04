@@ -14,7 +14,7 @@ from compr_meshgen import create_compr_walls, create_insert, create_particlebox
 
 """
 TODO:
-- Fix insertion settings
+- Fix insertion mass!
 - Check errors on BB
     - Do NOT use Periodic @ geometry lims
 - Validate results
@@ -171,7 +171,7 @@ class UniaxialCompression:
         # Insert inlet plane
         insert_inlet = self.study.ImportSurface(
             inlet_stl_path,
-            import_scale=1.0,
+            import_scale=0.99,
             convert_yz=True)[0]
         insert_inlet.SetName('Insert Inlet')
 
@@ -239,12 +239,15 @@ class UniaxialCompression:
             [-self.particle_box_len/2, -self.particle_box_len/2, -np.inf])
 
     def _insertion_settings(self):
-        fill_box_vol = self.particle_box_len**3
-        particle_vol = (4/3) * np.pi * self.p_radius**3
-        # 0.74 is a max vol fraction of spjereical particles
+        fill_box_vol = self.particle_box_len**3 #m^3
+        particle_vol = (4/3) * np.pi * self.p_radius**3 # m^3
+
+        # 0.64 is an avg packing fraction of sphereical particles
+
         n_particles = np.rint(
-            fill_box_vol * 0.74 / particle_vol
-            ).astype(int).item()
+            fill_box_vol * 0.64 / particle_vol
+        ).astype(int).item()
+        
         mass_particles = particle_vol * self.p_density * n_particles
         flowr = mass_particles / self.t_fill
 
@@ -252,6 +255,7 @@ class UniaxialCompression:
         particle_inlet = self.study.CreateParticleInlet(
             insert_inlet, self.particle
         )
+
         input_property_lst = particle_inlet.GetInputPropertiesList()
         input_property_lst[0].SetMassFlowRate(flowr, 'kg/s')
 
@@ -339,7 +343,8 @@ class UniaxialCompression:
                 f"Unknown solver type: {_proc}. Use 'CPU', 'GPU', or 'MULTI_GPU'.")
 
         self.solver.SetSimulationDuration(runtime, 's')
-
+        self.solver.SetReleaseParticlesWithoutOverlapCheck(True)
+        
         if neighbour_search:
             if neighbour_search in ['BVH', 'RegularGrid', 'SparseGrid']:
                 self.solver.SetNeighborSearchModel(neighbour_search)
@@ -470,4 +475,3 @@ if __name__ == "__main__":
     uniax.postprocess(
         plot=True
     )
-    uniax.rocky.close()
