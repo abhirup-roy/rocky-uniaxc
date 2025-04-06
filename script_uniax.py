@@ -63,10 +63,6 @@ study.SetName('Uniaxial Compression')
 # ========== Mesh Generation ==========
 # =====================================
 
-# create_particlebox(particle_box_len)
-# create_compr_walls(particle_box_len)
-# create_insert(particle_box_len)
-
 meshdir = os.path.abspath('meshes')
 compr_wall1_stl_path = os.path.join(meshdir, 'compressive_wall1.stl')
 compr_wall2_stl_path = os.path.join(meshdir, 'compressive_wall2.stl')
