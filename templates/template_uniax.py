@@ -191,15 +191,6 @@ if rolling_model != 'none':
 
 # ========== Particle Sizes ==========
 # ====================================
-particle = study.CreateParticle()
-size_distr_lst = particle.GetSizeDistributionList()
-size_distr_lst.Clear()  # clear auto-generated size distribution
-
-psd = size_distr_lst.New()
-psd.SetSize(p_radius, 'm')
-psd.SetCumulativePercentage(100)
-particle.SetMaterial(particle_mat)
-
 if isinstance(p_radius, float) or isinstance(p_radius, int):
     particle = study.CreateParticle()
     size_distr_lst = particle.GetSizeDistributionList()
@@ -281,6 +272,17 @@ else:
     particle_vol = (4/3) * np.pi * p_radius**3  # m^3
     n_particles = fill_box_vol / particle_vol
     mass_particles = particle_vol * p_density * n_particles
+
+    study.CreateVolumetricInlet(
+        particle = particle,
+        name = 'Volumetric Inlet',
+        mass = mass_particles,
+        seed_coordinates = [0, 0, 0],
+        geometries = [particle_box],
+        use_geometries_to_compute = True,
+        box_center = [0, 0, 0],
+        box_dimensions = [particle_box_len, particle_box_len, particle_box_len],
+    )
 
 
 # ========== Compression Motion ==========

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
 import os
-import shutil
 import json
+import subprocess
 from collections import OrderedDict
 import itertools
 from pprint import pprint
@@ -58,15 +58,14 @@ def slurm_sbatch(case_dir: str, autolaunch: bool = False):
     """Create a slurm sbatch script for each case.
     Change if needed.
     """
-    template = """
-    #!/bin/bash
+    template = """#!/bin/bash
 
 
     #SBATCH --job-name=uniaxc
     #SBATCH --ntasks=20
     #SBATCH --cpus-per-task=1
     #SBATCH --nodes=1
-    #SBATCH --time=5-0
+    #SBATCH --time=4-0
     #SBATCH --qos=bbdefault
     #SBATCH --mail-type=ALL
     #SBATCH --account=windowcr-astrazeneca-abhi
@@ -94,12 +93,17 @@ def slurm_sbatch(case_dir: str, autolaunch: bool = False):
     """
     # Write the sbatch script to a file
     write_path = os.path.join(case_dir, 'runRocky.sh')
+    
     with open(write_path, 'w') as sbatch_file:
         sbatch_file.write(template)
 
     if autolaunch:
         with cd(case_dir):
-            os.system('sbatch runRocky.sh')
+            try:
+                result = subprocess.run(['sbatch', 'runRocky.sh'], check=True, capture_output=True, text=True)
+                print(f"Job submitted successfully: {result.stdout}")
+            except subprocess.CalledProcessError as e:
+                print(f"Error submitting job: {e.stderr}")
 
 def make_cases(
         meshdir='meshes',
@@ -170,6 +174,8 @@ def make_cases(
 
         print(f"Launching case {i}...")
         slurm_sbatch(case_dir, autolaunch=autolaunch)
+
+    print(f"Exiting launcher script now")
 
 if __name__ == "__main__":
     make_cases(autolaunch=True)
