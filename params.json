@@ -1,0 +1,48 @@
+{
+    "particle_properties": {
+        "radius": [
+            150e6
+        ],
+        "density": [
+            2700
+        ],
+        "poisson": [
+            0.25
+        ],
+        "youngmod": [
+            5e6
+        ]
+    },
+    "inseractions": {
+        "pp": {
+            "fric_dyn": [
+                0.7
+            ],
+            "fric_stat": [
+                0.7
+            ],
+            "fric_rolling": [
+                0.1
+            ]
+        },
+        "pw": {
+            "fric_dyn": [
+                0.7
+            ],
+            "fric_stat": [
+                0.7
+            ],
+            "fric_rolling": [
+                0.1
+            ]
+        }
+    },
+    "exp_settings": {
+        "box_len": [
+            0.01
+        ],
+        "p_compress": [
+            15e3
+        ]
+    }
+}
