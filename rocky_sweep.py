@@ -9,6 +9,7 @@ from pprint import pprint
 
 import jinja2
 
+from compr_meshgen import create_particlebox, create_compr_walls, create_insert
 
 class cd:
     """Context manager for changing the current working directory"""
@@ -100,7 +101,6 @@ def slurm_sbatch(case_dir: str, autolaunch: bool = False):
         with cd(case_dir):
             os.system('sbatch runRocky.sh')
 
-
 def make_cases(
         meshdir='meshes',
         json_path='params.json',
@@ -108,9 +108,6 @@ def make_cases(
         autolaunch=True
         ):
 
-    meshdir = os.path.abspath(meshdir)
-    if not os.path.exists(meshdir):
-        raise FileNotFoundError(f"Directory {meshdir} does not exist.")
     template_dir = os.path.abspath(template_dir)
     if not os.path.exists(template_dir):
         raise FileNotFoundError(f"Directory {template_dir} does not exist.")
@@ -124,6 +121,14 @@ def make_cases(
 
         case_dir = f"case_{i}"
         os.makedirs(case_dir, exist_ok=True)
+
+        # Generate the mesh files
+        with cd(case_dir):
+            if not os.path.exists(meshdir):
+                os.makedirs(meshdir)
+            create_particlebox(params[12], meshsize=0.001, gui=False)
+            create_compr_walls(params[12], meshsize=0.001, gui=False)
+            create_insert(params[12], meshsize=0.001, gui=False)
 
         script_contxt = {
             'RADIUS_P': params[0],
