@@ -59,36 +59,34 @@ def slurm_sbatch(case_dir: str, autolaunch: bool = False):
     Change if needed.
     """
     template = """#!/bin/bash
+#SBATCH --job-name=uniaxc
+#SBATCH --ntasks=20
+#SBATCH --cpus-per-task=1
+#SBATCH --nodes=1
+#SBATCH --time=2-0
+#SBATCH --qos=bbdefault
+#SBATCH --mail-type=ALL
+#SBATCH --account=windowcr-astrazeneca-abhi
 
 
-    #SBATCH --job-name=uniaxc
-    #SBATCH --ntasks=20
-    #SBATCH --cpus-per-task=1
-    #SBATCH --nodes=1
-    #SBATCH --time=4-0
-    #SBATCH --qos=bbdefault
-    #SBATCH --mail-type=ALL
-    #SBATCH --account=windowcr-astrazeneca-abhi
+module purge; module load bluebear
+module load bear-apps/2023a
+module load ANSYS_Rocky/2024R2.0
 
 
-    module purge; module load bluebear
-    module load bear-apps/2023a
-    module load ANSYS_Rocky/2024R2.0
+#HOW TO USE:
 
+# --simulate  		Processes from the beginning, in hidden mode, the project file name and location that follows in quotes.
+# --ncpus=		Choose number
+# --resume=		0 for off, 1 for on
+# --use-gpu		0 for off, 1 for on
+# --gpu-num		Choose number
+# --script		Runs a script .py file, the name of which follows in quotes.
+# --headless		Process from the beginning, in hidden mode, the script .py file name of which follows in quotes.
 
-    #HOW TO USE:
+# Run the application
 
-    # --simulate  		Processes from the beginning, in hidden mode, the project file name and location that follows in quotes.
-    # --ncpus=		Choose number
-    # --resume=		0 for off, 1 for on
-    # --use-gpu		0 for off, 1 for on
-    # --gpu-num		Choose number
-    # --script		Runs a script .py file, the name of which follows in quotes.
-    # --headless		Process from the beginning, in hidden mode, the script .py file name of which follows in quotes.
-
-    # Run the application
-
-    Rocky --script "script_uniax.py" --headless
+Rocky --script "script_uniax.py" --headless >> rocky.log
 
     """
     # Write the sbatch script to a file

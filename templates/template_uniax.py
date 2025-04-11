@@ -106,6 +106,7 @@ compr_wall1 = study.ImportWall(compr_wall1_stl_path,
                                import_scale=1.0,
                                convert_yz=True)[0]
 compr_wall1.SetName('Compression Wall 1')
+compr_wall1.SetBoundaryMass(1e-6)
 
 # Put other compressing at edge of the particle box
 compr_wall2 = study.ImportWall(compr_wall2_stl_path,
@@ -242,6 +243,11 @@ physics.SetNormalForceModel(normal_force_model)
 physics.SetTangentialForceModel(tangential_force_model)
 physics.SetAdhesionModel(adhesion_model)
 
+physics.SetGravityXDirection(-9.81)
+physics.SetGravityYDirection(0)
+physics.SetGravityZDirection(0)
+
+
 # ========== Insertion Settings ==========
 # ========================================
 
@@ -278,8 +284,7 @@ else:
         name = 'Volumetric Inlet',
         mass = mass_particles,
         seed_coordinates = [0, 0, 0],
-        geometries = [particle_box],
-        use_geometries_to_compute = True,
+        use_geometries_to_compute = False,
         box_center = [0, 0, 0],
         box_dimensions = [particle_box_len, particle_box_len, particle_box_len],
     )
@@ -314,6 +319,27 @@ else:
     force_motion.SetStartTime(t_settle)
 
 compr_motion_frame.ApplyTo(compr_wall1)
+
+# ========== Boundary Conditions ==========
+# =========================================
+domain_settings = study.GetDomainSettings()
+domain_settings.SetCartesianPeriodicDirections('YZ')
+domain_settings.SetDomainType('CARTESIAN')
+
+domain_settings.SetCoordinateLimitsMinValues(
+    [-particle_box_len/2 - 1e6, -particle_box_len/2, -particle_box_len/2]
+)
+domain_settings.SetCoordinateLimitsMaxValues(
+    [particle_box_len/2 + 1e6, particle_box_len/2, particle_box_len/2]
+)
+
+domain_settings.SetPeriodicLimitsMinCoordinates(
+    [-particle_box_len/2 - 1e6, -particle_box_len/2, -particle_box_len/2]
+)
+
+domain_settings.SetPeriodicLimitsMaxCoordinates(
+    [particle_box_len/2 + 1e6, particle_box_len/2, particle_box_len/2]
+)
 
 # ========== Simulation Settings ==========
 # =========================================
@@ -357,7 +383,7 @@ x = particles.GetGridFunction('Coordinate : X')
 
 # Find settled time step
 timestep = study.GetTimeSet()
-settled_timestep = np.where(timestep == 2)[0][0].item()
+settled_timestep = np.where(timestep == t_settle)[0][0].item()
 
 x_arr_init = x.GetArray(time_step=settled_timestep)
 x_max_init, x_min_init = x_arr_init.min().item(), x_arr_init.max().item()
