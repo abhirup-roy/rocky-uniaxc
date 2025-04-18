@@ -382,8 +382,9 @@ particles = study.GetParticles()
 x = particles.GetGridFunction('Coordinate : X')
 
 # Find settled time step
-timestep = study.GetTimeSet()
-settled_timestep = np.where(timestep == t_settle)[0][0].item()
+timesteps = study.GetTimeSet()
+step_arr = timesteps.GetValues()
+settled_timestep = np.where(step_arr == t_settle)[0][0].item()
 
 x_arr_init = x.GetArray(time_step=settled_timestep)
 x_max_init, x_min_init = x_arr_init.min().item(), x_arr_init.max().item()
@@ -481,7 +482,12 @@ cols = [
     normal_force_model,
     tangential_force_model,
     rolling_model,
-    adhesion_model
+    adhesion_model,
+    particle_vol,
+    hausner_ratio,
+    compr_indx,
+    bulk_dens,
+    packed_dens
 ]
 
 col_names = [
@@ -503,9 +509,19 @@ col_names = [
     'tangential_force_model',
     'rolling_model',
     'adhesion_model',
-    'particle_vol'
+    'particle_vol',
+    'hausner_ratio',
+    'compr_indx',
+    'bulk_dens',
+    'packed_dens'
 ]
+
+assert len(cols) == len(col_names), "Column names and values must be the same length"
+
 with open('results.txt', 'w') as f:
-    f.write(col_names)
+    f.write(','.join(col_names))  # Convert col_names to a comma-separated string
     f.write('\n')
-    f.write(str(cols))
+    f.write(','.join(map(str, cols)))  # Convert cols to a comma-separated string
+
+project.SaveProject()
+project.CloseProject(check_save_state=False)
