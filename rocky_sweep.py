@@ -26,9 +26,11 @@ class cd:
 
 def iter_params(json_path: str='params.json'):
     """Iterate over all parameter combinations."""
+    # Load the JSON file
     with open(json_path, 'r') as f_params:
         params = json.load(f_params, object_pairs_hook=OrderedDict)
 
+    # Find all combinations of parameters
     param_combinations = itertools.product(
         params['particle_properties']['radius'],
         params['particle_properties']['density'],
@@ -58,12 +60,14 @@ def slurm_sbatch(case_dir: str, autolaunch: bool = False):
     """Create a slurm sbatch script for each case.
     Change if needed.
     """
+    # Define the sbatch script template
+    # This is a simple template. You can modify it as needed.
     template = """#!/bin/bash
 #SBATCH --job-name=uniaxc
 #SBATCH --ntasks=20
 #SBATCH --cpus-per-task=1
 #SBATCH --nodes=1
-#SBATCH --time=2-0
+#SBATCH --time=5-0
 #SBATCH --qos=bbdefault
 #SBATCH --mail-type=ALL
 #SBATCH --account=windowcr-astrazeneca-abhi
@@ -92,35 +96,41 @@ Rocky --script "script_uniax.py" --headless >> rocky.log
     # Write the sbatch script to a file
     write_path = os.path.join(case_dir, 'runRocky.sh')
     
+    #  Create the sbatch script in sweeping directory
     with open(write_path, 'w') as sbatch_file:
         sbatch_file.write(template)
 
+    # Launch the sbatch script from each case directory
     if autolaunch:
         with cd(case_dir):
             try:
                 result = subprocess.run(['sbatch', 'runRocky.sh'], check=True, capture_output=True, text=True)
+                os.mkdir('plots')
                 print(f"Job submitted successfully: {result.stdout}")
             except subprocess.CalledProcessError as e:
                 print(f"Error submitting job: {e.stderr}")
 
 def make_cases(
-        meshdir='meshes',
-        json_path='params.json',
+        meshdir: str = 'meshes',
+        json_path: str = 'params.json',
         template_dir = 'templates',
-        autolaunch=True
+        autolaunch = True
         ):
 
+    # Get ensuring the template directory exists
     template_dir = os.path.abspath(template_dir)
     if not os.path.exists(template_dir):
         raise FileNotFoundError(f"Directory {template_dir} does not exist.")
 
+    # Populate template with parameters
     rocky_templ_env = jinja2.Environment(
         loader=jinja2.FileSystemLoader(f'{template_dir}')
     )
     rocky_template = rocky_templ_env.get_template('template_uniax.py')
 
     for i, params in enumerate(iter_params(json_path)):
-
+        # Create a directory for each case
+        # Include a plots directory for each case
         case_dir = f"case_{i}"
         os.makedirs(case_dir, exist_ok=True)
 
@@ -173,7 +183,7 @@ def make_cases(
         print(f"Launching case {i}...")
         slurm_sbatch(case_dir, autolaunch=autolaunch)
 
-    print(f"Exiting launcher script now")
+    print(f"Exiting launcher script now") 
 
 if __name__ == "__main__":
     make_cases(autolaunch=True)
