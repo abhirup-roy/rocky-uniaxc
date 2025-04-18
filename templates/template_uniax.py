@@ -386,6 +386,7 @@ timesteps = study.GetTimeSet()
 step_arr = timesteps.GetValues()
 settled_timestep = np.where(step_arr == t_settle)[0][0].item()
 
+#  Getting particle extremes' coordinates
 x_arr_init = x.GetArray(time_step=settled_timestep)
 x_max_init, x_min_init = x_arr_init.min().item(), x_arr_init.max().item()
 
@@ -410,6 +411,7 @@ z_max_compr = z_arr_compr.min().item()
 z_min_compr = z_arr_compr.max().item()
 processes = project.GetUserProcessCollection()
 
+#  Cuboid selection analysis for the initial state
 cuboid_selection_init = processes.CreateCubeProcess(particles)
 
 cuboid_selection_init.SetSize(
@@ -429,6 +431,7 @@ cuboid_selection_init.SetCenter(
 t, mass_init = cuboid_selection_init.GetNumpyCurve('Particles Mass')
 plot_mass(t, mass_init, "mass_init") if plot else None
 
+# Cuboid selection analysis for the compressed state
 cuboid_selection_compr = processes.CreateCubeProcess(particles)
 
 cuboid_selection_compr.SetSize(
@@ -438,7 +441,7 @@ cuboid_selection_compr.SetSize(
     unit="m"
 )
 
-cuboid_selection_init.SetCenter(
+cuboid_selection_compr.SetCenter(
     (x_max_compr+x_min_compr)/2,
     (y_max_compr+y_min_compr)/2,
     (z_max_compr+z_min_compr)/2,
