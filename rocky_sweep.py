@@ -1,4 +1,29 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+__author__ = "Abhirup Roy"
+__email__ = "axr154@bham.ac.uk"
+__status__ = "Development"
+
+"""
+This script generates multiple cases for Rocky DEM simulations using a template and a set of parameters.
+It creates a directory for each case, populates the template with parameters, and generates the necessary mesh files.
+It also creates a slurm sbatch script for each case and can automatically launch the job on a slurm cluster.
+It uses the jinja2 library for templating and the gmsh library for mesh generation.
+
+The script uses a JSON file to define the parameters for the simulations.
+The parameters include properties of the particles, interactions, and experimental settings.
+The script iterates over all combinations of parameters, creating a case directory for each combination.
+
+Example usage:
+    from rocky_sweep import make_cases
+    make_cases(
+        meshdir='meshes',
+        json_path='params.json',
+        template_dir='templates',
+        autolaunch=True
+    )
+"""
 
 import os
 import json

@@ -1,13 +1,30 @@
 #!/usr/bin/env python3
 
+__author__ = "Abhirup Roy"
+__email__ = "axr154@bham.ac.uk"
+__status__ = "Development"
+
+"""
+Uniaxial compression simulation script for Rocky DEM.
+This script sets up a uniaxial compression simulation in Rocky DEM via Python API.
+It creates a particle box, compressive walls, and an inlet for the particles.
+It also sets the material properties, interaction properties, and simulation settings.
+
+The script is designed to used with the sweeper script to generate multiple simulations 
+with different parameters.
+"""
 import os
 import numpy as np
 import matplotlib.pyplot as plt
 
 
 # ========== WORKSPACE VARS ==========
+"""
+This is where you can set the paths for the simulation.
+"""
 project_dir: str = os.getcwd()
 
+# Don't need this unless using PyRocky
 bb_rocky_path = '/rds/bear-apps/2023a/EL8-ice/software/ANSYS_Rocky/2024R2.0/bin/Rocky'
 vm_rocky_path = '/home/rocky-vm/ansys_inc/v242/rocky/bin/Rocky'
 
@@ -15,6 +32,7 @@ vm_rocky_path = '/home/rocky-vm/ansys_inc/v242/rocky/bin/Rocky'
 # ========== RUN BASED VARS ==========
 """
 This is where you can set the parameters for the simulation.
+Used by the sweeper script.
 """
 # ---------- Particle Vars ----------
 p_radius: float = {{RADIUS_P}}  # m
