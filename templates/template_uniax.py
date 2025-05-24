@@ -10,10 +10,11 @@ This script sets up a uniaxial compression simulation in Rocky DEM via Python AP
 It creates a particle box, compressive walls, and an inlet for the particles.
 It also sets the material properties, interaction properties, and simulation settings.
 
-The script is designed to used with the sweeper script to generate multiple simulations 
+The script is designed to used with the sweeper script to generate multiple simulations
 with different parameters.
 """
 import os
+import sqlite3
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -48,19 +49,26 @@ assert rolling_model in ['type_1', 'type_3', 'none', 'custom']
 pp_dynamic_friction: float = {{DYNAMIC_FRICTION_PP}}
 pp_static_friction: float = {{STATIC_FRICTION_PP}}
 pp_cor: float = {{COR_PP}}
-pp_rolling_friction: float = {{ROLLING_FRICTION_PP}}
+rolling_friction: float = {{ROLLING_FRICTION}}
 
 pw_dynamic_friction: float = {{DYNAMIC_FRICTION_PW}}
 pw_static_friction: float = {{STATIC_FRICTION_PW}}
 pw_cor: float = {{COR_PW}}
-pw_rolling_friction: float = {{ROLLING_FRICTION_PW}}
 
 # ---------- Contact model --------
 normal_force_model = '{{NORMAL_MODEL}}'
-assert normal_force_model in ['linear_hysteresis', 'linear_elastic_viscous', 'damped_hertzian', 'custom']
+assert normal_force_model in [
+    'linear_hysteresis',
+    'linear_elastic_viscous',
+    'damped_hertzian',
+    'custom']
 
 tangential_force_model = '{{TANG_MODEL}}'
-assert tangential_force_model in ['elastic_coulomb', 'coulomb_limit', 'mindlin_deresiewicz', 'custom']
+assert tangential_force_model in [
+    'elastic_coulomb',
+    'coulomb_limit',
+    'mindlin_deresiewicz',
+    'custom']
 
 adhesion_model = '{{ADH_MODEL}}'
 assert adhesion_model in ['none', 'constant', 'linear', 'JKR', 'custom']
@@ -113,11 +121,11 @@ study.SetName('Uniaxial Compression')
 # ========== Mesh Generation ==========
 # =====================================
 
-meshdir = '{{MESH_DIR}}'
+meshdir = os.path.abspath(f'../{{MESH_DIR}}_{particle_box_len}')
+
 compr_wall1_stl_path = os.path.join(meshdir, 'compressive_wall1.stl')
 compr_wall2_stl_path = os.path.join(meshdir, 'compressive_wall2.stl')
 inlet_stl_path = os.path.join(meshdir, 'insert.stl')
-particle_box_stl_path = os.path.join(meshdir, 'particlebox.stl')
 
 # Put compressing wall 0.5 times the size of the particle box
 compr_wall1 = study.ImportWall(compr_wall1_stl_path,
@@ -131,21 +139,7 @@ compr_wall2 = study.ImportWall(compr_wall2_stl_path,
                                import_scale=1.0,
                                convert_yz=True)[0]
 compr_wall2.SetName('Compression Wall 2')
-compr_wall2.SetTranslation([particle_box_len/2 + 1e-6, 0, 0])
-
-# Insert particle box
-particle_box = study.ImportWall(
-    particle_box_stl_path,
-    import_scale=1.0,
-    convert_yz=True)[0]
-particle_box.SetName('Particle Box')
-if insert_type == 'ins':
-    particle_box.SetDisableTime(t_fill + t_settle)
-    # Set the particle box to be shifted 1 micron up
-    # to prevent ineraction with periodic boundaries
-    particle_box.SetTranslation([0, 1e-6, 0])
-else:
-    particle_box.SetDisableTime(t_settle)
+compr_wall2.SetTranslation([particle_box_len / 2 + 1e-6, 0, 0])
 
 # Insert inlet plane
 insert_inlet = study.ImportSurface(
@@ -176,7 +170,6 @@ wall_mat.SetPoissonRatio(0.3)
 wall_mat.SetUseBulkDensity(False)
 
 # Set the material for the meshes
-particle_box.SetMaterial(wall_mat)
 compr_wall1.SetMaterial(wall_mat)
 compr_wall2.SetMaterial(wall_mat)
 
@@ -197,15 +190,11 @@ pw_interaction = interaction_collection.GetMaterialsInteraction(
 pp_interaction.SetRestitutionCoefficient(pp_cor)
 pp_interaction.SetStaticFriction(pp_static_friction)
 pp_interaction.SetDynamicFriction(pp_dynamic_friction)
-if rolling_model != 'none':
-    pp_interaction.SetRollingFriction(pp_rolling_friction)
 
 # Set the contact laws for the particle-wall interaction
 pw_interaction.SetRestitutionCoefficient(pw_cor)
 pw_interaction.SetStaticFriction(pw_static_friction)
 pw_interaction.SetDynamicFriction(pw_dynamic_friction)
-if rolling_model != 'none':
-    pw_interaction.SetRollingFriction(pw_rolling_friction)
 
 
 # ========== Particle Sizes ==========
@@ -252,6 +241,8 @@ elif isinstance(p_radius, dict):
 
 # Set particle material
 particle.SetMaterial(particle_mat)
+if rolling_model != 'none':
+    particle.SetRollingResistance(rolling_friction)
 
 # ========== Simulation Physics ==========
 # ========================================
@@ -270,7 +261,7 @@ physics.SetGravityZDirection(0)
 # ========================================
 
 fill_box_vol = particle_box_len**3  # m^3
-particle_vol = (4/3) * np.pi * p_radius**3  # m^3
+particle_vol = (4 / 3) * np.pi * p_radius**3  # m^3
 
 # 0.64 is an avg packing fraction of sphereical particles
 if insert_type == 'ins':
@@ -293,18 +284,18 @@ if insert_type == 'ins':
     particle_inlet.DisablePeriodic()
 else:
     fill_box_vol = particle_box_len**3  # m^3
-    particle_vol = (4/3) * np.pi * p_radius**3  # m^3
+    particle_vol = (4 / 3) * np.pi * p_radius**3  # m^3
     n_particles = fill_box_vol / particle_vol
     mass_particles = particle_vol * p_density * n_particles
 
     study.CreateVolumetricInlet(
-        particle = particle,
-        name = 'Volumetric Inlet',
-        mass = mass_particles,
-        seed_coordinates = [0, 0, 0],
-        use_geometries_to_compute = False,
-        box_center = [0, 0, 0],
-        box_dimensions = [particle_box_len, particle_box_len, particle_box_len],
+        particle=particle,
+        name='Volumetric Inlet',
+        mass=mass_particles,
+        seed_coordinates=[0, 0, 0],
+        use_geometries_to_compute=False,
+        box_center=[0, 0, 0],
+        box_dimensions=[particle_box_len, particle_box_len, particle_box_len],
     )
 
 
@@ -321,7 +312,7 @@ freebody_motion.SetType('Free Body Translation')
 freebody = freebody_motion.GetTypeObject()
 freebody.SetFreeMotionDirection('x')
 if insert_type == 'ins':
-    freebody.SetStartTime(t_fill+t_settle)
+    freebody.SetStartTime(t_fill + t_settle)
 else:
     freebody_motion.SetStartTime(t_settle)
 
@@ -332,7 +323,7 @@ force_motion.SetType('Additional Force')
 add_force = force_motion.GetTypeObject()
 add_force.SetForceValue([-force_magnitude, 0, 0], 'N')
 if insert_type == 'ins':
-    force_motion.SetStartTime(t_fill+t_settle)
+    force_motion.SetStartTime(t_fill + t_settle)
 else:
     force_motion.SetStartTime(t_settle)
 
@@ -345,18 +336,18 @@ domain_settings.SetCartesianPeriodicDirections('YZ')
 domain_settings.SetDomainType('CARTESIAN')
 
 domain_settings.SetCoordinateLimitsMinValues(
-    [-particle_box_len/2 - 1e6, -particle_box_len/2, -particle_box_len/2]
+    [-particle_box_len / 2 - 1e6, -particle_box_len / 2, -particle_box_len / 2]
 )
 domain_settings.SetCoordinateLimitsMaxValues(
-    [particle_box_len/2 + 1e6, particle_box_len/2, particle_box_len/2]
+    [particle_box_len / 2 + 1e6, particle_box_len / 2, particle_box_len / 2]
 )
 
 domain_settings.SetPeriodicLimitsMinCoordinates(
-    [-particle_box_len/2 - 1e6, -particle_box_len/2, -particle_box_len/2]
+    [-particle_box_len / 2 - 1e6, -particle_box_len / 2, -particle_box_len / 2]
 )
 
 domain_settings.SetPeriodicLimitsMaxCoordinates(
-    [particle_box_len/2 + 1e6, particle_box_len/2, particle_box_len/2]
+    [particle_box_len / 2 + 1e6, particle_box_len / 2, particle_box_len / 2]
 )
 
 # ========== Simulation Settings ==========
@@ -366,6 +357,8 @@ study = project.GetStudy()
 solver = study.GetSolver()
 solver.SetNumberOfProcessors(int(nprocs))
 
+solver.SetUseFixedTimestep(True)
+solver.SetFixedTimestep(1e-6, 's')
 
 solver.SetSimulationDuration(runtime, 's')
 solver.SetReleaseParticlesWithoutOverlapCheck(True)
@@ -433,16 +426,16 @@ processes = project.GetUserProcessCollection()
 cuboid_selection_init = processes.CreateCubeProcess(particles)
 
 cuboid_selection_init.SetSize(
-    x_max_init-x_min_init,
-    y_max_init-y_min_init,
-    z_max_init-z_min_init,
+    x_max_init - x_min_init,
+    y_max_init - y_min_init,
+    z_max_init - z_min_init,
     unit="m"
 )
 
 cuboid_selection_init.SetCenter(
-    (x_max_init+x_min_init)/2,
-    (y_max_init+y_min_init)/2,
-    (z_max_init+z_min_init)/2,
+    (x_max_init + x_min_init) / 2,
+    (y_max_init + y_min_init) / 2,
+    (z_max_init + z_min_init) / 2,
     unit="m"
 )
 
@@ -453,36 +446,36 @@ plot_mass(t, mass_init, "mass_init") if plot else None
 cuboid_selection_compr = processes.CreateCubeProcess(particles)
 
 cuboid_selection_compr.SetSize(
-    x_max_compr-x_min_compr,
-    y_max_compr-y_min_compr,
-    z_max_compr-z_min_compr,
+    x_max_compr - x_min_compr,
+    y_max_compr - y_min_compr,
+    z_max_compr - z_min_compr,
     unit="m"
 )
 
 cuboid_selection_compr.SetCenter(
-    (x_max_compr+x_min_compr)/2,
-    (y_max_compr+y_min_compr)/2,
-    (z_max_compr+z_min_compr)/2,
+    (x_max_compr + x_min_compr) / 2,
+    (y_max_compr + y_min_compr) / 2,
+    (z_max_compr + z_min_compr) / 2,
     unit="m"
 )
 
 t, mass_compr = cuboid_selection_compr.GetNumpyCurve('Particles Mass')
 plot_mass(t, mass_compr, "mass_compressed") if plot else None
 
-V_bulk = (x_max_init-x_min_init
-          )*(y_max_init-y_min_init
-             )*(z_max_init-z_min_init)
-bulk_dens = np.abs(mass_init.max()/V_bulk).item()
+V_bulk = (x_max_init - x_min_init
+          ) * (y_max_init - y_min_init
+               ) * (z_max_init - z_min_init)
+bulk_dens = np.abs(mass_init.max() / V_bulk).item()
 
-V_packed = (x_max_compr-x_min_compr
-            )*(y_max_compr-y_min_compr
-               )*(z_max_compr-z_min_compr)
-packed_dens = np.abs(mass_compr.max()/V_packed).item()
+V_packed = (x_max_compr - x_min_compr
+            ) * (y_max_compr - y_min_compr
+                 ) * (z_max_compr - z_min_compr)
+packed_dens = np.abs(mass_compr.max() / V_packed).item()
 print(f"Packed density: {packed_dens} kg/m^3")
 
-hausner_ratio = bulk_dens/packed_dens
+hausner_ratio = packed_dens / bulk_dens
 print("Hausner Ratio: ", hausner_ratio)
-compr_indx = 100 * (1-packed_dens/bulk_dens)
+compr_indx = 100 * (1 - bulk_dens / packed_dens)
 print("Compressibility Index: ", compr_indx)
 
 cols = [
@@ -492,11 +485,10 @@ cols = [
     p_youngmod,
     pp_dynamic_friction,
     pp_static_friction,
-    pp_rolling_friction,
+    rolling_friction,
     pp_cor,
     pw_dynamic_friction,
     pw_static_friction,
-    pw_rolling_friction,
     pw_cor,
     particle_box_len,
     compr_pressure,
@@ -518,11 +510,10 @@ col_names = [
     'p_youngmod',
     'pp_dynamic_friction',
     'pp_static_friction',
-    'pp_rolling_friction',
+    'p_rolling_friction',
     'pp_cor',
     'pw_dynamic_friction',
     'pw_static_friction',
-    'pw_rolling_friction',
     'pw_cor',
     'particle_box_len',
     'compr_pressure',
@@ -537,12 +528,61 @@ col_names = [
     'packed_dens'
 ]
 
-assert len(cols) == len(col_names), "Column names and values must be the same length"
+assert len(cols) == len(
+    col_names), "Column names and values must be the same length"
 
 with open('results.txt', 'w') as f:
-    f.write(','.join(col_names))  # Convert col_names to a comma-separated string
+    # Convert col_names to a comma-separated string
+    f.write(','.join(col_names))
     f.write('\n')
-    f.write(','.join(map(str, cols)))  # Convert cols to a comma-separated string
+    # Convert cols to a comma-separated string
+    f.write(','.join(map(str, cols)))
 
-project.SaveProject()
-project.CloseProject(check_save_state=False)
+sqlite_path = os.path.abspath('../results.db')
+with sqlite3.connect(sqlite_path) as conn:
+    cursor = conn.cursor()
+
+    create_table = f'''CREATE TABLE IF NOT EXISTS results (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                p_radius REAL,
+                p_density REAL,
+                p_poisson REAL,
+                p_youngmod REAL,
+                pp_dynamic_friction REAL,
+                pp_static_friction REAL,
+                rolling_friction REAL,
+                pp_cor REAL,
+                pw_dynamic_friction REAL,
+                pw_static_friction REAL,
+                pw_cor REAL,
+                particle_box_len REAL,
+                compr_pressure REAL,
+                normal_force_model TEXT,
+                tangential_force_model TEXT,
+                rolling_model TEXT,
+                adhesion_model TEXT,
+                particle_vol REAL,
+                hausner_ratio REAL,
+                compr_indx REAL,
+                bulk_dens REAL,
+                packed_dens REAL
+            )
+    '''
+    insert_row = f'''INSERT INTO results (
+            p_radius, p_density, p_poisson, p_youngmod, pp_dynamic_friction, pp_static_friction, rolling_friction, pp_cor,
+            pw_dynamic_friction, pw_static_friction, pw_cor, particle_box_len, compr_pressure, normal_force_model,
+            tangential_force_model, rolling_model, adhesion_model, particle_vol, hausner_ratio, compr_indx, bulk_dens, packed_dens
+        ) VALUES ({','.join(['?']*len(cols))})
+        '''
+    
+    try:
+        cursor.execute(create_table)
+        cursor.execute(insert_row, cols)
+        conn.commit()
+
+    except sqlite3.Error as e:
+        raise e
+    
+    finally:
+        project.SaveProject()
+        project.CloseProject(check_save_state=False)

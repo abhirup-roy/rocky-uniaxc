@@ -177,6 +177,71 @@ def create_insert(size, meshsize=0.001, gui=False):
     gmsh.finalize()
 
 
+def create_meshes_efficiently(size, meshsize=0.001, out_dir='meshes'):
+    """Create all required meshes with a single GMSH instance."""
+    os.makedirs(out_dir, exist_ok=True)
+    half_size = size / 2
+
+    # Initialize GMSH only once
+    gmsh.initialize(sys.argv)
+
+    # First wall
+    gmsh.model.add("wall1")
+    p1 = gmsh.model.geo.addPoint(-half_size, -size, -half_size, meshSize=meshsize)
+    p2 = gmsh.model.geo.addPoint(half_size, -size, -half_size, meshSize=meshsize)
+    p3 = gmsh.model.geo.addPoint(-half_size, -size, half_size, meshSize=meshsize)
+    p4 = gmsh.model.geo.addPoint(half_size, -size, half_size, meshSize=meshsize)
+
+    l1 = gmsh.model.geo.addLine(p1, p2)
+    l2 = gmsh.model.geo.addLine(p2, p4)
+    l3 = gmsh.model.geo.addLine(p4, p3)
+    l4 = gmsh.model.geo.addLine(p3, p1)
+
+    gmsh.model.geo.addPlaneSurface([gmsh.model.geo.addCurveLoop([l1, l2, l3, l4])])
+    gmsh.model.geo.synchronize()
+    gmsh.model.mesh.generate(3)
+    gmsh.write(os.path.join(out_dir, 'compressive_wall1.stl'))
+    gmsh.model.remove()  # Clear current model
+
+    # Second wall
+    gmsh.model.add("wall2")
+    p1 = gmsh.model.geo.addPoint(half_size, size, -half_size, meshSize=meshsize)
+    p2 = gmsh.model.geo.addPoint(-half_size, size, -half_size, meshSize=meshsize)
+    p3 = gmsh.model.geo.addPoint(half_size, size, half_size, meshSize=meshsize)
+    p4 = gmsh.model.geo.addPoint(-half_size, size, half_size, meshSize=meshsize)
+
+    l1 = gmsh.model.geo.addLine(p1, p2)
+    l2 = gmsh.model.geo.addLine(p2, p4)
+    l3 = gmsh.model.geo.addLine(p4, p3)
+    l4 = gmsh.model.geo.addLine(p3, p1)
+
+    gmsh.model.geo.addPlaneSurface([gmsh.model.geo.addCurveLoop([l1, l2, l3, l4])])
+    gmsh.model.geo.synchronize()
+    gmsh.model.mesh.generate(3)
+    gmsh.write(os.path.join(out_dir, 'compressive_wall2.stl'))
+    gmsh.model.remove()
+
+    # Insert
+    gmsh.model.add("insert")
+    p1 = gmsh.model.geo.addPoint(-half_size, -half_size, half_size, meshSize=meshsize)
+    p2 = gmsh.model.geo.addPoint(half_size, -half_size, half_size, meshSize=meshsize)
+    p3 = gmsh.model.geo.addPoint(half_size, half_size, half_size, meshSize=meshsize)
+    p4 = gmsh.model.geo.addPoint(-half_size, half_size, half_size, meshSize=meshsize)
+
+    l1 = gmsh.model.geo.addLine(p1, p2)
+    l2 = gmsh.model.geo.addLine(p2, p3)
+    l3 = gmsh.model.geo.addLine(p3, p4)
+    l4 = gmsh.model.geo.addLine(p4, p1)
+
+    gmsh.model.geo.addPlaneSurface([gmsh.model.geo.addCurveLoop([l1, l2, l3, l4])])
+    gmsh.model.geo.synchronize()
+    gmsh.model.mesh.generate(3)
+    gmsh.write(os.path.join(out_dir, 'insert.stl'))
+
+    # Finalize GMSH
+    gmsh.finalize()
+
+
 # if __name__ == "__main__":
 #     create_particlebox(0.1, meshsize=0.001)
 #     create_compr_walls(0.1, meshsize=0.001)
