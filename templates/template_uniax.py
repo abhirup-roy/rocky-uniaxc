@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import sys
 import os
 import sqlite3
 
 import numpy as np
 import matplotlib.pyplot as plt
+
 
 # Particle properties
 P_RADIUS: float = {{RADIUS_P}}  # m
@@ -455,22 +457,109 @@ def _calc_bulk_dens(particles, time_step, sample_frac=0.8) -> float:
 
     return sample_mass / sample_vol
 
+def _calc_bulk_dens_v2(particles, time_step) -> tuple:
 
-def post_process(dump: bool = True) -> None:
+    # My clever way of importing the packing3d module
+    import importlib.util
+    packing_path = os.path.abspath('../../packing3d')
+    init_file = os.path.join(packing_path, '__init__.py')
+
+    spec = importlib.util.spec_from_file_location("packing3d", init_file)
+    packing3d = importlib.util.module_from_spec(spec)
+    sys.modules["packing3d"] = packing3d  # Add to sys.modules
+    spec.loader.exec_module(packing3d)
+
+    x_coords = particles.GetGridFunction(
+        'Coordinate : X').GetArray(time_step=time_step)
+    y_coords = particles.GetGridFunction(
+        'Coordinate : Y').GetArray(time_step=time_step)
+    z_coords = particles.GetGridFunction(
+        'Coordinate : Z').GetArray(time_step=time_step)
+    radii = particles.GetGridFunction(
+        'Particle Size').GetArray(time_step=time_step) / 2.
+    
+    # Using @fjbarter's clever code to compute packing fraction
+    packing_frac = packing3d.compute_packing_cartesian(
+        x_data=x_coords, y_data=y_coords,
+        z_data=z_coords, radii=radii
+    )
+
+    bulk_dens = packing_frac * P_DENSITY
+    voidage = 1 - packing_frac
+
+    return  bulk_dens, voidage
+    
+
+def post_process(plot: bool = True, bulk_dens_method='precise') -> None:
     """
-    Post-process the simulation results.
+    Post-process the simulation results. Includes calculating bulk density,
+    voidage, Hausner ratio, and compression index. Optionally plots the results.
+
+    **Parameters:**
+    - `plot` (bool): If True, generates plots of bulk density and voidage over time.
+    - `bulk_dens_method` (str): Method to calculate bulk density. Options are 'precise' or 'sample'.
+            Precises uses a more accurate method based on particle positions, considering cuttoffs
+            while 'sample' uses a sampling method based on a fraction of the domain.
     """
     global study, project
 
-    timestep_arr = study.GetTimeSet().GetValues()
-    settled_timestep = np.where(timestep_arr == T_SETTLE)[0][0].item()
-    particles = study.GetParticles()
+    time_set = study.GetTimeSet()
+    timeset_arr = time_set.GetValues()
+    settled_timestep = np.where(timeset_arr == T_SETTLE)[0][0].item()
+    particles = study.GetParticles()s
 
-    bulk_dens = _calc_bulk_dens(particles, settled_timestep)
-    compressed_dens = _calc_bulk_dens(particles, -1)
+    if bulk_dens_method == 'precise':
+        uncompr_dens, voidage = _calc_bulk_dens_v2(particles, settled_timestep)
+        compr_dens, voidage = _calc_bulk_dens_v2(particles, -1)
+    elif bulk_dens_method == 'sample':
+        bulk_dens = _calc_bulk_dens(particles, settled_timestep)
+        compr_dens = _calc_bulk_dens(particles, -1)
 
-    hausner_ratio = compressed_dens / bulk_dens
-    compr_idx = 100 * (compressed_dens - bulk_dens) / compressed_dens
+    hausner_ratio = compr_dens / uncompr_dens
+    compr_idx = 100 * (compr_dens - uncompr_dens) / compr_dens
+
+    bulk_dens = []
+    voidage = []
+    if plot:
+        PLOTS_DIR = os.path.join(PROJECT_DIR, 'plots')
+        for timestep in np.nditer(time_set, flags=['refs_ok']):
+            bulk_dens_ts, voidage_ts = _calc_bulk_dens_v2(
+                particles, timestep.item()
+            )
+            bulk_dens.append(bulk_dens_ts)
+            voidage.append(voidage_ts)
+        bulk_dens_t = np.array(bulk_dens)
+        voidage_t = np.array(voidage)
+
+        # Create a plot with two y-axes
+        fig, ax1 = plt.subplots(figsize=(10, 6))
+        
+        # Plot bulk density on the left y-axis
+        color = 'tab:blue'
+        ax1.set_xlabel('Time (s)')
+        ax1.set_ylabel('Bulk Density (kg/m³)', color=color)
+        ax1.plot(timeset_arr, bulk_dens_t, color=color)
+        ax1.tick_params(axis='y', labelcolor=color)
+        
+        # Create a second y-axis for voidage
+        ax2 = ax1.twinx()
+        color = 'tab:red'
+        ax2.set_ylabel('Voidage', color=color)
+        ax2.plot(timeset_arr, voidage_t, color=color)
+        ax2.tick_params(axis='y', labelcolor=color)
+        
+        # Add title and grid
+        plt.title('Bulk Density and Voidage vs Time')
+        ax1.grid(True, alpha=0.3)
+
+        
+        # Add legend
+        lines1, labels1 = ax1.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax1.legend(lines1 + lines2, labels1 + labels2, loc='best')
+        
+        fig.tight_layout()
+        plt.savefig(os.path.join(PLOTS_DIR, 'bulk_density_voidage.png'), dpi=300)
 
     col_vals = [
         P_RADIUS, P_DENSITY, P_YOUNGMOD, P_POISSON,
@@ -478,7 +567,7 @@ def post_process(dump: bool = True) -> None:
         PW_DYNAMIC_FRICTION, PW_STATIC_FRICTION, PW_COR,
         ROLLING_FRICTION, COMPR_PRESSURE,
         NORMAL_FORCE_MODEL, TANGENTIAL_FORCE_MODEL, ADHESION_MODEL,
-        ROLLING_MODEL, PARTICLE_BOX_LEN, bulk_dens, compressed_dens,
+        ROLLING_MODEL, PARTICLE_BOX_LEN, uncompr_dens, compr_dens,
         hausner_ratio, compr_idx
     ]
 

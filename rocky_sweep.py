@@ -36,8 +36,10 @@ import jinja2
 
 from compr_meshgen import create_compr_walls, create_insert
 
+
 class cd:
     """Context manager for changing the current working directory"""
+
     def __init__(self, newPath):
         self.newPath = os.path.expanduser(newPath)
 
@@ -49,7 +51,7 @@ class cd:
         os.chdir(self.savedPath)
 
 
-def iter_params(json_path: str='params.json'):
+def iter_params(json_path: str = 'params.json'):
     """Iterate over all parameter combinations."""
     # Load the JSON file
     with open(json_path, 'r') as f_params:
@@ -119,7 +121,7 @@ Rocky --script "script_uniax.py" --headless >> rocky.log
     """
     # Write the sbatch script to a file
     write_path = os.path.join(case_dir, 'runRocky.sh')
-    
+
     #  Create the sbatch script in sweeping directory
     with open(write_path, 'w') as sbatch_file:
         sbatch_file.write(template)
@@ -128,19 +130,21 @@ Rocky --script "script_uniax.py" --headless >> rocky.log
     if autolaunch:
         with cd(case_dir):
             try:
-                result = subprocess.run(['sbatch', 'runRocky.sh'], check=True, capture_output=True, text=True)
+                result = subprocess.run(
+                    ['sbatch', 'runRocky.sh'], check=True, capture_output=True, text=True)
                 os.mkdir('plots')
                 print(f"Job submitted successfully: {result.stdout}")
             except subprocess.CalledProcessError as e:
                 print(f"Error submitting job: {e.stderr}")
 
+
 def make_cases(
         sweep_name: str,
         meshdir: str = 'meshes',
         json_path: str = 'params.json',
-        template_dir = 'templates',
-        autolaunch = True
-        ):
+        template_dir='templates',
+        autolaunch=True
+):
     """Generate and launch cases with improved performance."""
     # Ensure the template directory exists
     template_dir = os.path.abspath(template_dir)
@@ -152,15 +156,15 @@ def make_cases(
         loader=jinja2.FileSystemLoader(f'{template_dir}')
     )
     rocky_template = rocky_templ_env.get_template('template_uniax.py')
-    
+
     # Get all parameter combinations
     all_params = list(iter_params(json_path))
     total_cases = len(all_params)
     print(f"Setting up {total_cases} cases...")
-    
+
     # Create the sweep directory
     os.makedirs(sweep_name, exist_ok=True)
-    
+
     # Create directories for all cases first (parallel processing preparation)
     case_dirs = []
     for i in range(total_cases):
@@ -169,30 +173,31 @@ def make_cases(
         os.makedirs(os.path.join(case_dir, 'plots'), exist_ok=True)
         os.makedirs(os.path.join(case_dir, meshdir), exist_ok=True)
         case_dirs.append(case_dir)
-    
+
     # Generate meshes only once per unique size
     # This is a major optimization - don't recreate identical meshes
-    unique_sizes = set([params[11] for params in all_params])  # Box length parameter
+    unique_sizes = set([params[11]
+                       for params in all_params])  # Box length parameter
     size_to_mesh_dir = {}
-    
+
     print(f"Generating meshes for {len(unique_sizes)} unique sizes...")
     for size in unique_sizes:
         # Create a shared mesh directory for this size
         shared_mesh_dir = os.path.join(sweep_name, f'meshes_{size}')
         os.makedirs(shared_mesh_dir, exist_ok=True)
-        
+
         # Generate meshes only once for each unique size
         from compr_meshgen import create_meshes_efficiently
         create_meshes_efficiently(size, meshsize=0.01, out_dir=shared_mesh_dir)
-        
+
         size_to_mesh_dir[size] = shared_mesh_dir
-    
+
     # Write scripts and prepare to launch
     print("Generating scripts and preparing jobs...")
     for i, params in enumerate(all_params):
         case_dir = case_dirs[i]
         box_size = params[11]
-        
+
         # Prepare script context
         script_contxt = {
             'RADIUS_P': params[0],
@@ -220,16 +225,16 @@ def make_cases(
         # Render template and write script
         rendered_content = rocky_template.render(script_contxt)
         script_path = os.path.join(case_dir, 'script_uniax.py')
-        
+
         with open(script_path, 'w') as script_file:
             script_file.write(rendered_content)
-            
+
         # Log case information
         print(f"Case {i}/{total_cases} prepared")
-        
+
         # Create SLURM script
         slurm_sbatch(case_dir, autolaunch=False)  # Don't launch yet
-    
+
     # Launch all cases at once if requested
     if autolaunch:
         print("Launching all cases...")
@@ -238,14 +243,18 @@ def make_cases(
             # Use subprocess to launch in the background
             with cd(case_dir):
                 try:
-                    result = subprocess.run(['sbatch', 'runRocky.sh'], check=True, capture_output=True, text=True)
+                    result = subprocess.run(
+                        ['sbatch', 'runRocky.sh'], check=True, capture_output=True, text=True)
                     print(f"Job submitted: {result.stdout.strip()}")
                 except subprocess.CalledProcessError as e:
                     print(f"Error submitting job: {e.stderr}")
 
     print(f"All {total_cases} cases prepared and launched.")
-    print(f"Exiting launcher script now") 
+    print(f"Exiting launcher script now")
+
 
 if __name__ == "__main__":
-    make_cases(sweep_name='pp_sweep', json_path='pp_sweep.json', autolaunch=True)
+    # make_cases(sweep_name='pp_sweep', json_path='pp_sweep.json', autolaunch=True)
     # make_cases(sweep_name='pw_sweep', json_path='pw_sweep.json',autolaunch=True)
+    # make_cases(sweep_name='size_sweep_new', json_path='params.json', autolaunch=True)
+    make_cases(sweep_name='testing', json_path='test.json', autolaunch=True)
