@@ -4,9 +4,11 @@
 import sys
 import os
 import sqlite3
+import warnings
 
 import numpy as np
 import matplotlib.pyplot as plt
+
 
 
 # Particle properties
@@ -27,6 +29,16 @@ ROLLING_FRICTION: float = {{ROLLING_FRICTION}}
 PW_DYNAMIC_FRICTION: float = {{DYNAMIC_FRICTION_PW}}
 PW_STATIC_FRICTION: float = {{STATIC_FRICTION_PW}}
 PW_COR: float = {{COR_PW}}
+
+for _p in [
+    PP_DYNAMIC_FRICTION, PP_STATIC_FRICTION, PP_COR,
+    PW_DYNAMIC_FRICTION, PW_STATIC_FRICTION, PW_COR,
+    ROLLING_FRICTION, P_POISSON]:
+    if _p < 0 or _p > 1:
+        raise ValueError(
+            f"Expected a value between 0 and 1."
+            f"Got {_p} for one of the particle properties."
+        )
 
 # Contact models
 NORMAL_FORCE_MODEL = '{{NORMAL_MODEL}}'
@@ -130,6 +142,9 @@ def load_meshes() -> None:
     )[0]
     top_wall.SetName('Top Wall')
     top_wall.SetBoundaryMass(1e-6)
+    top_wall.SetTranslation(
+        [-PARTICLE_BOX_LEN / 2, 0, 0 ]
+    )
 
     # Load bottom wall with a slight offset
     # to avoid overlap wth periodic boundary
@@ -396,7 +411,7 @@ def set_domain_settings() -> None:
     )
 
 
-def simulate() -> None:
+def simulate(autotimestep: bool=True, timestep=None) -> None:
 
     if not _run_flag:
         return
@@ -407,8 +422,13 @@ def simulate() -> None:
     solver = study.GetSolver()
     solver.SetNumberOfProcessors(int(NPROCS))
 
-    solver.SetUseFixedTimestep(True)
-    solver.SetFixedTimestep(1e-6, 's')
+    if not autotimestep:
+        if not timestep:
+            raise ValueError("Timestep must be specified when autotimestep is False.")
+        solver.SetUseFixedTimestep(True)
+        solver.SetFixedTimestep(timestep, 's')
+        solver.SetUseFixedTimestep(True)
+        solver.SetFixedTimestep(1e-6, 's')
 
     solver.SetSimulationDuration(RUNTIME, 's')
 
@@ -457,7 +477,8 @@ def _calc_bulk_dens(particles, time_step, sample_frac=0.8) -> float:
 
     return sample_mass / sample_vol
 
-def _calc_bulk_dens_v2(particles, time_step) -> tuple:
+
+def _calc_bulk_dens_v2(particles, time_step, sample_frac=0.8    ) -> tuple:
 
     # My clever way of importing the packing3d module
     import importlib.util
@@ -477,18 +498,32 @@ def _calc_bulk_dens_v2(particles, time_step) -> tuple:
         'Coordinate : Z').GetArray(time_step=time_step)
     radii = particles.GetGridFunction(
         'Particle Size').GetArray(time_step=time_step) / 2.
+
+    positions = np.vstack((x_coords, y_coords, z_coords))
+    pos_rngs = np.ptp(positions, axis=1)
+    sample_rng = pos_rngs * sample_frac
+
+    boundaries = {
+        "x_min": x_coords.mean() - sample_rng[0] / 2,
+        "x_max": x_coords.mean() + sample_rng[0] / 2,
+        "y_min": y_coords.mean() - sample_rng[1] / 2,
+        "y_max": y_coords.mean() + sample_rng[1] / 2,
+        "z_min": z_coords.mean() - sample_rng[2] / 2,
+        "z_max": z_coords.mean() + sample_rng[2] / 2
+    }
     
     # Using @fjbarter's clever code to compute packing fraction
     packing_frac = packing3d.compute_packing_cartesian(
         x_data=x_coords, y_data=y_coords,
-        z_data=z_coords, radii=radii
+        z_data=z_coords, radii=radii,
+        boundaries=boundaries
     )
 
     bulk_dens = packing_frac * P_DENSITY
     voidage = 1 - packing_frac
 
-    return  bulk_dens, voidage
-    
+    return bulk_dens, voidage
+
 
 def post_process(plot: bool = True, bulk_dens_method='precise') -> None:
     """
@@ -506,12 +541,12 @@ def post_process(plot: bool = True, bulk_dens_method='precise') -> None:
     time_set = study.GetTimeSet()
     timeset_arr = time_set.GetValues()
     settled_timestep = np.where(timeset_arr == T_SETTLE)[0][0].item()
-    particles = study.GetParticles()s
+    particles = study.GetParticles()
 
     if bulk_dens_method == 'precise':
         uncompr_dens, voidage = _calc_bulk_dens_v2(particles, settled_timestep)
         compr_dens, voidage = _calc_bulk_dens_v2(particles, -1)
-    elif bulk_dens_method == 'sample':
+    elif bulk_dens_method == 'coarse':
         bulk_dens = _calc_bulk_dens(particles, settled_timestep)
         compr_dens = _calc_bulk_dens(particles, -1)
 
@@ -533,33 +568,36 @@ def post_process(plot: bool = True, bulk_dens_method='precise') -> None:
 
         # Create a plot with two y-axes
         fig, ax1 = plt.subplots(figsize=(10, 6))
-        
+
         # Plot bulk density on the left y-axis
         color = 'tab:blue'
         ax1.set_xlabel('Time (s)')
         ax1.set_ylabel('Bulk Density (kg/m³)', color=color)
         ax1.plot(timeset_arr, bulk_dens_t, color=color)
         ax1.tick_params(axis='y', labelcolor=color)
-        
+
         # Create a second y-axis for voidage
         ax2 = ax1.twinx()
         color = 'tab:red'
         ax2.set_ylabel('Voidage', color=color)
         ax2.plot(timeset_arr, voidage_t, color=color)
         ax2.tick_params(axis='y', labelcolor=color)
-        
+
         # Add title and grid
         plt.title('Bulk Density and Voidage vs Time')
         ax1.grid(True, alpha=0.3)
 
-        
         # Add legend
         lines1, labels1 = ax1.get_legend_handles_labels()
         lines2, labels2 = ax2.get_legend_handles_labels()
         ax1.legend(lines1 + lines2, labels1 + labels2, loc='best')
-        
+
         fig.tight_layout()
-        plt.savefig(os.path.join(PLOTS_DIR, 'bulk_density_voidage.png'), dpi=300)
+        plt.savefig(
+            os.path.join(
+                PLOTS_DIR,
+                'bulk_density_voidage.png'),
+            dpi=300)
 
     col_vals = [
         P_RADIUS, P_DENSITY, P_YOUNGMOD, P_POISSON,
@@ -580,6 +618,19 @@ def post_process(plot: bool = True, bulk_dens_method='precise') -> None:
         'rolling_model', 'box_len', 'bulk_density', 'compressed_density',
         'hausner_ratio', 'compression_index'
     ]
+
+    if particles.GetNumberOfParticles(time_set[0]) != particles.GetNumberOfParticles(
+        time_set[-1]):
+            warnings.warn(
+                "Particles are being lost during the simulation."
+                "Results set to NaN."
+            )
+            global particle_warning, particle_rng
+            particle_warning = True
+            particle_rng = [
+                particles.GetNumberOfParticles(time_set[0]), 
+                particles.GetNumberOfParticles(time_set[-1])
+            ]
 
     assert len(col_vals) == len(col_names), \
         "Column values and names must have the same length."
@@ -644,7 +695,6 @@ def post_process(plot: bool = True, bulk_dens_method='precise') -> None:
             project.CloseProject(check_save_state=False)
 
 
-
 setup()
 load_meshes()
 load_material_properties()
@@ -656,3 +706,11 @@ mesh_motions()
 set_domain_settings()
 simulate()
 post_process()
+
+if particle_warning:
+    raise RuntimeWarning(
+        f"Particles were lost during the simulation. "
+        f"Initial particle count: {particle_rng[0]}, "
+        f"Final particle count: {particle_rng[1]}. "
+        f"Check the simulation settings and results."
+    )
