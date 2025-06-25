@@ -59,8 +59,8 @@ ADHESION_MODEL = '{{ADH_MODEL}}'
 assert ADHESION_MODEL in ['none', 'constant', 'linear', 'JKR', 'custom']
 
 PARTICLE_BOX_LEN: float = {{L_BOX}}  # m
-T_FILL: float = 3  # s
-T_SETTLE: float = 1  # s
+T_FILL: float = 0  # s
+T_SETTLE: float = 1.5  # s
 
 COMPR_PRESSURE: float = {{P_COMPRESS}}  # Pa
 T_COMPRESSION: float = 1  # s
@@ -378,7 +378,7 @@ def mesh_motions() -> None:
     if INSERT_TYPE == 'ins':
         force_motion.SetStartTime(T_FILL + T_SETTLE)
     else:
-        force_motion.SetStartTime(T_SETTLE)
+        force_motion.SetStartTime(T_SETTLE + 0.5)
 
     compr_motion_frame.ApplyTo(top_wall)
 
