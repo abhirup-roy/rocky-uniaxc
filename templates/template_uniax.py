@@ -424,11 +424,11 @@ def simulate(autotimestep: bool=True, timestep=None) -> None:
 
     if not autotimestep:
         if not timestep:
-            raise ValueError("Timestep must be specified when autotimestep is False.")
-        solver.SetUseFixedTimestep(True)
-        solver.SetFixedTimestep(timestep, 's')
-        solver.SetUseFixedTimestep(True)
-        solver.SetFixedTimestep(1e-6, 's')
+            solver.SetUseFixedTimestep(True)
+            solver.SetFixedTimestep(1e-6, 's')
+        else:
+            solver.SetUseFixedTimestep(True)
+            solver.SetFixedTimestep(timestep, 's')
 
     solver.SetSimulationDuration(RUNTIME, 's')
 
@@ -444,6 +444,97 @@ def simulate(autotimestep: bool=True, timestep=None) -> None:
         print(f"Simulation Progress: {study.GetProgress():.2f} %")
     print("Simulation completed.")
 
+def settle_particles(autotimestep: bool=True, timestep=None):
+
+    global study, project
+
+    if not _run_flag or study.HasResults():
+        return
+    
+    solver = study.GetSolver()
+    solver.SetSimulationDuration(T_SETTLE, 's')
+
+    if not autotimestep:
+        if not timestep:
+            solver.SetUseFixedTimestep(True)
+            solver.SetFixedTimestep(1e-6, 's')
+        else:
+            solver.SetUseFixedTimestep(True)
+            solver.SetFixedTimestep(timestep, 's')
+
+    solver.SetSimulationDuration(RUNTIME, 's')
+    study.StartSimulation()
+    while study.IsSimulating():
+        study.RefreshResults()
+        print(f"Simulation Progress: {study.GetProgress():.2f} %")
+    
+    project.SaveProjectForRestart('uniaxial_compression_restart.rocky')
+
+def compress_particles(autotimestep: bool=True, timestep=None):
+    
+    global study, project, top_wall
+
+    if not _run_flag or study.HasResults():
+        return
+    
+    # Find current wall position
+    wall_pos = top_wall.GetGridFunction('Coordinate : Nodal : X')\
+        .GetArray(time_step=-1).max()
+    
+    # Calculate new wall position -> 1 micron above bed height
+    particles = study.GetParticles()
+    new_wall_pos = particles.GetGridFunction(
+        'Coordinate : X').GetArray(time_step=-1).max()\
+        + max(P_RADIUS) + 1e-6
+    
+    
+    frame_source = study.GetMotionFrameSource()
+
+    frame_source = study.GetMotionFrameSource()
+    compr_motion_frame = frame_source.NewFrame()
+    motions = compr_motion_frame.GetMotions()
+
+    # If the wall is already at the new position, skip the motion
+    if wall_pos != new_wall_pos:
+        lower_wall_motion = motions.New()
+        lower_wall_motion.SetType('Translation')
+        translation = lower_wall_motion.GetTypeObject()
+        translation.SetInput('fixed_velocity')
+        translation.SetVelocity(
+            [new_wall_pos-wall_pos, 0, 0], 'm/s')
+        translation.SetStartTime(0)
+        translation.SetStopTime(0.5)
+
+    # Handling the free body motion
+    freebody_motion = motions.New()
+    freebody_motion.SetType('Free Body Translation')
+    freebody = freebody_motion.GetTypeObject()
+    freebody.SetFreeMotionDirection('x')
+    freebody_motion.SetStartTime(0.5)
+
+    # Set the compression wall motion
+    force_magnitude = COMPR_PRESSURE * PARTICLE_BOX_LEN**2
+    force_motion = motions.New()
+    force_motion.SetType('Additional Force')
+    add_force = force_motion.GetTypeObject()
+    add_force.SetForceValue([-force_magnitude, 0, 0], 'N')
+    force_motion.SetStartTime(0.5)
+
+    compr_motion_frame.ApplyTo(top_wall)
+
+    solver = study.GetSolver()
+    solver.SetSimulationDuration(T_COMPRESSION, 's')
+
+    if not autotimestep:
+        if not timestep:
+            solver.SetUseFixedTimestep(True)
+            solver.SetFixedTimestep(1e-6, 's')
+        else:
+            solver.SetUseFixedTimestep(True)
+            solver.SetFixedTimestep(timestep, 's')
+
+    study.StartSimulation()
+    project.SaveProject()
 
 def _calc_bulk_dens(particles, time_step, sample_frac=0.8) -> float:
     x_coords = particles.GetGridFunction(
@@ -544,7 +635,7 @@ def post_process(plot: bool = True, bulk_dens_method='precise') -> None:
     particles = study.GetParticles()
 
     if bulk_dens_method == 'precise':
-        uncompr_dens, voidage = _calc_bulk_dens_v2(particles, settled_timestep)
+        uncompr_dens, voidage = _calc_bulk_dens_v2(particles, 0)
         compr_dens, voidage = _calc_bulk_dens_v2(particles, -1)
     elif bulk_dens_method == 'coarse':
         bulk_dens = _calc_bulk_dens(particles, settled_timestep)
@@ -704,7 +795,8 @@ sim_physics()
 insertion_settings()
 mesh_motions()
 set_domain_settings()
-simulate()
+settle_particles()
+compress_particles()
 post_process()
 
 if particle_warning:
