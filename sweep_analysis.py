@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 
+import re
+import glob
 import os
 import sqlite3
 import matplotlib.pyplot as plt
@@ -28,6 +31,7 @@ def dump_db(
         sweep_name: str,
         filetype: str = 'csv',
         outputs_dir: str = 'pyoutputs'):
+    
     outputs_dir_path = os.path.join(
         PWD, sweep_name, outputs_dir
     )
@@ -72,8 +76,24 @@ def find_faulty_runs(sweep_name: str, dump: bool = False):
             ser = pd.read_csv(results_file).squeeze()
             if ser['hausner_ratio'] < 1 or ser['hausner_ratio'] > 3:
                 faulty_cases[case_dir] = ser['hausner_ratio']
+                
+        
+        output_file = glob.glob(
+            os.path.join(case_path, 'slurm-*.out')
+        )
+        if output_file:
+            with open(output_file[0], 'r') as f:
+                content = f.read()
+                if "RuntimeWarning: Particles were lost during the simulation" in content:
+
+                    particles_init = int(re.search(
+                        r"Initial particle count: (\d+)", content).group(1))
+                    particles_final = int(re.search(
+                        r"Final particle count: (\d+)", content).group(1))
+                    print(f"Warning: Particles lost in {case_dir}: {particles_init} -> {particles_final} ({particles_final - particles_init})")
 
     print(f"Faulty cases in sweep '{sweep_name}':")
+
     if faulty_cases:
         for case, hr_value in faulty_cases.items():
             print(f"  - {case}:   HR = {hr_value:.3f}")
@@ -88,5 +108,8 @@ def find_faulty_runs(sweep_name: str, dump: bool = False):
 
 
 if __name__ == "__main__":
-    dump_db(sweep_name="size_sweep")
-    # find_faulty_runs(sweep_name="pp_sweep")
+    
+    sweep_name = "test"
+
+    dump_db(sweep_name=sweep_name)
+    find_faulty_runs(sweep_name=sweep_name)

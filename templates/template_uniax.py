@@ -346,43 +346,6 @@ def insertion_settings() -> None:
         )
 
 
-def mesh_motions() -> None:
-    """
-    Set the mesh motions for the walls.
-    """
-    if not _run_flag and not _resume_flag:
-        return
-
-    global study, top_wall, bottom_wall
-
-    frame_source = study.GetMotionFrameSource()
-    compr_motion_frame = frame_source.NewFrame()
-    motions = compr_motion_frame.GetMotions()
-
-    # Handling the free body motion
-    freebody_motion = motions.New()
-    freebody_motion.SetType('Free Body Translation')
-    freebody = freebody_motion.GetTypeObject()
-    freebody.SetFreeMotionDirection('x')
-    if INSERT_TYPE == 'ins':
-        freebody.SetStartTime(T_FILL + T_SETTLE)
-    else:
-        freebody_motion.SetStartTime(T_SETTLE)
-
-    # Set the compression wall motion
-    force_magnitude = COMPR_PRESSURE * PARTICLE_BOX_LEN**2
-    force_motion = motions.New()
-    force_motion.SetType('Additional Force')
-    add_force = force_motion.GetTypeObject()
-    add_force.SetForceValue([-force_magnitude, 0, 0], 'N')
-    if INSERT_TYPE == 'ins':
-        force_motion.SetStartTime(T_FILL + T_SETTLE)
-    else:
-        force_motion.SetStartTime(T_SETTLE + 0.5)
-
-    compr_motion_frame.ApplyTo(top_wall)
-
-
 def set_domain_settings() -> None:
 
     if not _run_flag and not _resume_flag:
@@ -802,7 +765,6 @@ load_interactions()
 set_psd()
 sim_physics()
 insertion_settings()
-# mesh_motions()
 set_domain_settings()
 settle_particles()
 compress_particles()
