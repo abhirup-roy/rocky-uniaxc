@@ -254,7 +254,8 @@ def make_cases(
 
 
 if __name__ == "__main__":
-    # make_cases(sweep_name='pp_sweep', json_path='pp_sweep.json', autolaunch=True)
-    # make_cases(sweep_name='pw_sweep', json_path='pw_sweep.json',autolaunch=True)
-    # make_cases(sweep_name='size_sweep_new', json_path='params.json', autolaunch=True)
-    make_cases(sweep_name='testing', json_path='test.json', autolaunch=True)
+    make_cases(
+        sweep_name='test',
+        json_path='json/test.json',
+        autolaunch=True
+    )

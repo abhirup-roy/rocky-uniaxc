@@ -450,9 +450,7 @@ def settle_particles(autotimestep: bool=True, timestep=None):
 
     if not _run_flag or study.HasResults():
         return
-    
-    solver = study.GetSolver()
-    solver.SetSimulationDuration(T_SETTLE, 's')
+
 
     if not autotimestep:
         if not timestep:
@@ -462,32 +460,41 @@ def settle_particles(autotimestep: bool=True, timestep=None):
             solver.SetUseFixedTimestep(True)
             solver.SetFixedTimestep(timestep, 's')
 
-    solver.SetSimulationDuration(RUNTIME, 's')
+    solver = study.GetSolver()
+    solver.SetSimulationDuration(T_SETTLE, 's')
     study.StartSimulation()
     while study.IsSimulating():
         study.RefreshResults()
         print(f"Simulation Progress: {study.GetProgress():.2f} %")
-    
+
+    # Find current wall position
+    old_wall_pos = top_wall.GetGridFunction('Coordinate : Nodal : X')\
+        .GetArray(time_step=-1).max()
+
+    # Calculate new wall position -> 1 micron above bed height
+    particles = study.GetParticles()
+
+    # Handle P_RADIUS being either a float or a dictionary
+    max_radius = P_RADIUS if isinstance(P_RADIUS, float) or isinstance(P_RADIUS, int) else max(P_RADIUS.keys())
+    new_wall_pos = particles.GetGridFunction(
+        'Coordinate : X').GetArray(time_step=-1).max()\
+        + max_radius + 1e-6
+
+    global wall_pos
+    wall_pos = (old_wall_pos, new_wall_pos)
+
     project.SaveProjectForRestart('uniaxial_compression_restart.rocky')
 
 def compress_particles(autotimestep: bool=True, timestep=None):
-    
-    global study, project, top_wall
 
-    if not _run_flag or study.HasResults():
-        return
-    
-    # Find current wall position
-    wall_pos = top_wall.GetGridFunction('Coordinate : Nodal : X')\
-        .GetArray(time_step=-1).max()
-    
-    # Calculate new wall position -> 1 micron above bed height
-    particles = study.GetParticles()
-    new_wall_pos = particles.GetGridFunction(
-        'Coordinate : X').GetArray(time_step=-1).max()\
-        + max(P_RADIUS) + 1e-6
-    
-    
+    global study, project, top_wall, wall_pos
+    if not _run_flag:
+        raise RuntimeError(
+            "Simulation has not been run yet. "
+            "Please run the simulation before compressing particles."
+        )
+    old_wall_pos, new_wall_pos = wall_pos
+
     frame_source = study.GetMotionFrameSource()
 
     frame_source = study.GetMotionFrameSource()
@@ -495,15 +502,15 @@ def compress_particles(autotimestep: bool=True, timestep=None):
     motions = compr_motion_frame.GetMotions()
 
     # If the wall is already at the new position, skip the motion
-    if wall_pos != new_wall_pos:
+    if old_wall_pos != new_wall_pos:
         lower_wall_motion = motions.New()
         lower_wall_motion.SetType('Translation')
         translation = lower_wall_motion.GetTypeObject()
         translation.SetInput('fixed_velocity')
         translation.SetVelocity(
-            [new_wall_pos-wall_pos, 0, 0], 'm/s')
-        translation.SetStartTime(0)
-        translation.SetStopTime(0.5)
+            [new_wall_pos-old_wall_pos, 0, 0], 'm/s')
+        lower_wall_motion.SetStartTime(0)
+        lower_wall_motion.SetStopTime(0.5)
 
     # Handling the free body motion
     freebody_motion = motions.New()
@@ -521,7 +528,6 @@ def compress_particles(autotimestep: bool=True, timestep=None):
     force_motion.SetStartTime(0.5)
 
     compr_motion_frame.ApplyTo(top_wall)
-
     solver = study.GetSolver()
     solver.SetSimulationDuration(T_COMPRESSION, 's')
 
@@ -631,7 +637,7 @@ def post_process(plot: bool = True, bulk_dens_method='precise') -> None:
 
     time_set = study.GetTimeSet()
     timeset_arr = time_set.GetValues()
-    settled_timestep = np.where(timeset_arr == T_SETTLE)[0][0].item()
+    settled_timestep = 0
     particles = study.GetParticles()
 
     if bulk_dens_method == 'precise':
@@ -710,13 +716,16 @@ def post_process(plot: bool = True, bulk_dens_method='precise') -> None:
         'hausner_ratio', 'compression_index'
     ]
 
+    global particle_warning, particle_rng
+    particle_warning = False
+    particle_rng = []
+    
     if particles.GetNumberOfParticles(time_set[0]) != particles.GetNumberOfParticles(
         time_set[-1]):
             warnings.warn(
                 "Particles are being lost during the simulation."
                 "Results set to NaN."
             )
-            global particle_warning, particle_rng
             particle_warning = True
             particle_rng = [
                 particles.GetNumberOfParticles(time_set[0]), 
@@ -793,7 +802,7 @@ load_interactions()
 set_psd()
 sim_physics()
 insertion_settings()
-mesh_motions()
+# mesh_motions()
 set_domain_settings()
 settle_particles()
 compress_particles()
@@ -806,3 +815,4 @@ if particle_warning:
         f"Final particle count: {particle_rng[1]}. "
         f"Check the simulation settings and results."
     )
+ 
