@@ -5,6 +5,7 @@ import sys
 import os
 import sqlite3
 import warnings
+from typing import Optional
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -408,6 +409,17 @@ def simulate(autotimestep: bool=True, timestep=None) -> None:
     print("Simulation completed.")
 
 def settle_particles(autotimestep: bool=True, timestep=None):
+    """
+    Simulate the settling of particles in the domain.
+    This function runs the simulation for a specified duration to allow particles
+    to settle before the compression phase.
+
+    **Parameters:**
+    - `autotimestep` (bool): If True, uses the default timestep settings.
+    - `timestep` (float): If provided, sets a fixed timestep for the simulation.
+                          If not provided, a default timestep of 1e-6 seconds is used.
+                          If `autotimestep` is True, this parameter is ignored.
+    """
 
     global study, project
 
@@ -446,16 +458,30 @@ def settle_particles(autotimestep: bool=True, timestep=None):
     global wall_pos
     wall_pos = (old_wall_pos, new_wall_pos)
 
-    project.SaveProjectForRestart('uniaxial_compression_restart.rocky')
+    project.SaveProjectForRestart('uniaxial_compression_restart.rocky',
+                                  timestep_or_index=-1)
 
-def compress_particles(autotimestep: bool=True, timestep=None):
+def compress_particles(autotimestep: Optional[bool]=True, 
+                       timestep: Optional[float]=None,
+                       t_lower: Optional[float]=0.5):
+    """
+    Simulate the compression of particles in the domain.
+    This function applies a compressive force to the particles and simulates
+    the compression process for a specified duration.
+    
+    **Parameters:**
+    - `autotimestep` (bool): If True, uses the default timestep settings.
+    - `timestep` (float): If provided, sets a fixed timestep for the simulation.
+                          If not provided, a default timestep of 1e-6 seconds is used.
+                          If `autotimestep` is True, this parameter is ignored.
+    - `t_lower` (float): The duration for which the compressing wall moves down.
+                         Default is 0.5 seconds.
+    """
 
-    global study, project, top_wall, wall_pos
+    global study, project, top_wall, wall_pos, T_LOWER
     if not _run_flag:
-        raise RuntimeError(
-            "Simulation has not been run yet. "
-            "Please run the simulation before compressing particles."
-        )
+        return
+    T_LOWER = t_lower
     old_wall_pos, new_wall_pos = wall_pos
 
     frame_source = study.GetMotionFrameSource()
@@ -471,16 +497,16 @@ def compress_particles(autotimestep: bool=True, timestep=None):
         translation = lower_wall_motion.GetTypeObject()
         translation.SetInput('fixed_velocity')
         translation.SetVelocity(
-            [new_wall_pos-old_wall_pos, 0, 0], 'm/s')
+            [(new_wall_pos-old_wall_pos)/t_lower, 0, 0], 'm/s')
         lower_wall_motion.SetStartTime(0)
-        lower_wall_motion.SetStopTime(0.5)
+        lower_wall_motion.SetStopTime(t_lower)
 
     # Handling the free body motion
     freebody_motion = motions.New()
     freebody_motion.SetType('Free Body Translation')
     freebody = freebody_motion.GetTypeObject()
     freebody.SetFreeMotionDirection('x')
-    freebody_motion.SetStartTime(0.5)
+    freebody_motion.SetStartTime(t_lower)
 
     # Set the compression wall motion
     force_magnitude = COMPR_PRESSURE * PARTICLE_BOX_LEN**2
@@ -488,7 +514,7 @@ def compress_particles(autotimestep: bool=True, timestep=None):
     force_motion.SetType('Additional Force')
     add_force = force_motion.GetTypeObject()
     add_force.SetForceValue([-force_magnitude, 0, 0], 'N')
-    force_motion.SetStartTime(0.5)
+    force_motion.SetStartTime(t_lower)
 
     compr_motion_frame.ApplyTo(top_wall)
     solver = study.GetSolver()
@@ -538,8 +564,22 @@ def _calc_bulk_dens(particles, time_step, sample_frac=0.8) -> float:
     return sample_mass / sample_vol
 
 
-def _calc_bulk_dens_v2(particles, time_step, sample_frac=0.8    ) -> tuple:
+def _calc_bulk_dens_v2(particles, time_step, sample_frac=0.8) -> tuple:
+    """
+    Helper function to calculate bulk density and voidage
+    using the packing3d module. This function computes the
+    packing fraction based on the particle positions and radii,
+    and then calculates the bulk density and voidage.
 
+    **Parameters:**
+    - `particles`: The particles object from the Rocky study.
+    - `time_step`: The time step at which to calculate the bulk density.
+    - `sample_frac`: Fraction of the domain length to sample for packing fraction calculation.
+                     Default is 0.8 of box length.
+    **Returns:**
+    - `bulk_dens`: The bulk density of the particles at the given time step.
+    - `voidage`: The voidage of the particles at the given time step.
+    """
     # My clever way of importing the packing3d module
     import importlib.util
     packing_path = os.path.abspath('../../packing3d')
@@ -585,7 +625,8 @@ def _calc_bulk_dens_v2(particles, time_step, sample_frac=0.8    ) -> tuple:
     return bulk_dens, voidage
 
 
-def post_process(plot: bool = True, bulk_dens_method='precise') -> None:
+def post_process(plot: Optional[bool] = True, 
+                 bulk_dens_method: Optional[str]='precise') -> None:
     """
     Post-process the simulation results. Includes calculating bulk density,
     voidage, Hausner ratio, and compression index. Optionally plots the results.
@@ -600,11 +641,11 @@ def post_process(plot: bool = True, bulk_dens_method='precise') -> None:
 
     time_set = study.GetTimeSet()
     timeset_arr = time_set.GetValues()
-    settled_timestep = 0
+    settled_timestep = np.where(timeset_arr == T_LOWER)[0][0].item()
     particles = study.GetParticles()
 
     if bulk_dens_method == 'precise':
-        uncompr_dens, voidage = _calc_bulk_dens_v2(particles, 0)
+        uncompr_dens, voidage = _calc_bulk_dens_v2(particles, settled_timestep)
         compr_dens, voidage = _calc_bulk_dens_v2(particles, -1)
     elif bulk_dens_method == 'coarse':
         bulk_dens = _calc_bulk_dens(particles, settled_timestep)
