@@ -5,11 +5,21 @@ import sys
 import os
 import sqlite3
 import warnings
+from typing import Optional
 import importlib.util
 
 import numpy as np
 import matplotlib.pyplot as plt
 
+
+# Import particle shapes usingg importlib
+shapes_spec = importlib.util.spec_from_file_location(
+    'particles_shapes', os.path.abspath('../../particles_shapes.py'))
+if not shapes_spec:
+    raise ImportError("Could not find the particles_shapes.py file.")
+particle_shapes = importlib.util.module_from_spec(shapes_spec)
+sys.modules['particles_shapes'] = particle_shapes  # Add to sys.modules
+shapes_spec.loader.exec_module(particle_shapes)
 
 
 # Particle properties
@@ -71,8 +81,13 @@ INSERT_TYPE: str = 'vol'  # 'vol', 'ins'
 assert INSERT_TYPE in ['vol', 'ins']
 
 # Solver settings
-NPROCS: int = os.environ.get('SLURM_CPUS_ON_NODE', 20)
-NEIGHBOUR_SEARCH: str = None
+NPROCS = os.environ.get('SLURM_CPUS_ON_NODE', 20)
+try:
+    NPROCS = int(NPROCS)
+except ValueError:
+    NPROCS = 20
+
+NEIGHBOUR_SEARCH = None
 if NEIGHBOUR_SEARCH is not None:
     assert NEIGHBOUR_SEARCH in ['BVH', 'RegularGrid', 'SparseGrid']
 
@@ -281,6 +296,57 @@ def set_psd() -> None:
     particle.SetMaterial(particle_mat)
     if ROLLING_FRICTION != 'none':
         particle.SetRollingResistance(ROLLING_FRICTION)
+
+def gen_particle(shape_dict: dict[str, float|str]) -> None:
+    """
+    Create a particle of a specific shape.
+    """
+    global particle
+
+    particle = study.CreateParticle()
+    shape = shape_dict.get("name")
+    match shape:
+        case "sphere":
+            shape_obj = particle_shapes.Sphere(radius=P_RADIUS)
+        case "spherocylinder":
+            vert_ar = shape_dict.get("vert_ar", 1.0)
+            shape_obj = particle_shapes.SpheroCylinder(radius=P_RADIUS, vert_ar=vert_ar)
+        case "polyhedron":
+            vert_ar = shape_dict.get("vert_ar", 1.0)
+            horiz_ar = shape_dict.get("horiz_ar", 1.0)
+            n_corners = shape_dict.get("n_corners", 6)
+            sq_degree = shape_dict.get("sq_degree", 1.0)
+
+            shape_obj = particle_shapes.Polyhedron(
+                radius=P_RADIUS, vert_ar=vert_ar,
+                horiz_ar=horiz_ar, n_corners=n_corners, 
+                superquadric_degree=sq_degree
+            )
+        case "custom_polyhedron":
+            stl_path = str(shape_dict.get("particle_path", ""))
+            if not stl_path or not os.path.exists(stl_path):
+                raise ValueError(
+                    "Custom polyhedron requires a valid STL file path."
+                )
+
+            shape_obj = particle_shapes.CustomPolyhedron(
+                stl_path=stl_path,
+                radius=P_RADIUS
+            )
+        case _:
+            raise ValueError(
+                f"Unknown shape type: {shape}. "
+                "Supported shapes are: 'sphere', 'spherocylinder', 'polyhedron', 'custom_polyhedron'."
+            )
+        
+    # Instantiate the shape for the particle
+    shape_obj.instantiate_shape(particle=particle)
+
+    if ROLLING_MODEL != 'none':
+        shape_obj.set_psd(material=particle_mat, rolling_friction=ROLLING_FRICTION)
+    else:
+        shape_obj.set_psd(material=particle_mat)
+
 
 
 def sim_physics() -> None:
@@ -799,11 +865,20 @@ def post_process(plot: Optional[bool] = True,
             project.CloseProject(check_save_state=False)
 
 
+shape_dict = {
+    "name": "{{SHAPE}}",
+    "vert_ar": {{VERT_AR}},
+    "horiz_ar": {{HORIZ_AR}},
+    "n_corners": {{N_CORNERS}},
+    "sq_degree": {{SQ_DEGREE}},
+    "particle_path": "{{PARTICLE_PATH}}"
+}
+
 setup()
 load_meshes()
 load_material_properties()
 load_interactions()
-set_psd()
+gen_particle(shape_dict)
 sim_physics()
 insertion_settings()
 set_domain_settings()

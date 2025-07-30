@@ -57,16 +57,24 @@ def iter_params(json_path: str = 'params.json'):
     with open(json_path, 'r') as f_params:
         params = json.load(f_params, object_pairs_hook=OrderedDict)
 
-    # Handle shape parameters - create lists for each shape property
-    shape_params = params['shape']
+    # Handle shape parameters - now it's an array of shape objects
+    shape_list = params['shape']
     
-    # Create lists for shape parameters, using defaults if not specified
-    shape_names = [shape_params.get('name', 'sphere')] if isinstance(shape_params.get('name'), str) else shape_params.get('name', ['sphere'])
-    vert_ars = [shape_params.get('vert_ar', 1.0)] if isinstance(shape_params.get('vert_ar'), (int, float)) else shape_params.get('vert_ar', [1.0])
-    horiz_ars = [shape_params.get('horiz_ar', 1.0)] if isinstance(shape_params.get('horiz_ar'), (int, float)) else shape_params.get('horiz_ar', [1.0])
-    n_corners_list = [shape_params.get('n_corners', 6)] if isinstance(shape_params.get('n_corners'), int) else shape_params.get('n_corners', [6])
-    sq_degrees = [shape_params.get('sq_degree', 1.0)] if isinstance(shape_params.get('sq_degree'), (int, float)) else shape_params.get('sq_degree', [1.0])
-    particle_paths = [shape_params.get('particle_path', '')] if isinstance(shape_params.get('particle_path'), str) else shape_params.get('particle_path', [''])
+    # Extract all possible values for each shape parameter
+    shape_names = []
+    vert_ars = []
+    horiz_ars = []
+    n_corners_list = []
+    sq_degrees = []
+    particle_paths = []
+    
+    for shape in shape_list:
+        shape_names.append(shape.get('name', 'sphere'))
+        vert_ars.append(shape.get('vert_ar', 1.0))
+        horiz_ars.append(shape.get('horiz_ar', 1.0))
+        n_corners_list.append(shape.get('n_corners', 6))
+        sq_degrees.append(shape.get('sq_degrees', 1.0))  # Note: using 'sq_degrees' to match JSON
+        particle_paths.append(shape.get('particle_path', ''))
 
     # Find all combinations of parameters
     param_combinations = itertools.product(
@@ -87,15 +95,8 @@ def iter_params(json_path: str = 'params.json'):
         params['contact_model']['tangential'],
         params['contact_model']['rolling'],
         params['contact_model']['adhesion'],
-        shape_names,
-        vert_ars,
-        horiz_ars,
-        n_corners_list,
-        sq_degrees,
-        particle_paths
+        shape_list
     )
-
-    pprint(params)
     return param_combinations
 
 
@@ -214,6 +215,8 @@ def make_cases(
         case_dir = case_dirs[i]
         box_size = params[11]
 
+        print(params)
+
         # Prepare script context
         script_contxt = {
             'RADIUS_P': params[0],
@@ -232,12 +235,12 @@ def make_cases(
             'TANG_MODEL': params[14],
             'ROLLING_MODEL': params[15],
             'ADH_MODEL': params[16],
-            'SHAPE': params[17],
-            'VERT_AR': params[18],
-            'HORIZ_AR': params[19],
-            'N_CORNERS': params[20],
-            'SQ_DEGREE': params[21],
-            'PARTICLE_PATH': params[22],
+            'SHAPE': params[-1].get('name', 'sphere'),  # Use the name from the shape object
+            'VERT_AR': params[-1].get('vert_ar', 0.5),
+            'HORIZ_AR': params[-1].get('horiz_ar', 1.0),
+            'N_CORNERS': params[-1].get('n_corners', 8),
+            'SQ_DEGREE': params[-1].get('sq_degree', 2.0),
+            'PARTICLE_PATH': params[-1].get('particle_path', ''),
             'MESH_DIR': str(meshdir),
         }
 

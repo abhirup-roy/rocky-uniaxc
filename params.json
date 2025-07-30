@@ -1,4 +1,17 @@
 {
+    "shape": [
+        {
+            "name": "spherocylinder",
+            "vert_ar": 0.5
+        },
+        {
+            "name": "polyhedron",
+            "vert_ar": 1,
+            "horiz_ar": 1,
+            "n_corners": 10,
+            "sq_degrees": 2.0
+        }
+    ],
     "particle_properties": {
         "radius": [
             150e-6
