@@ -5,7 +5,7 @@ import sys
 import os
 import sqlite3
 import warnings
-from typing import Optional
+import importlib.util
 
 import numpy as np
 import matplotlib.pyplot as plt

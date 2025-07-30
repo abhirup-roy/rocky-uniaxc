@@ -33,8 +33,8 @@ import itertools
 from pprint import pprint
 
 import jinja2
+from compr_meshgen import create_meshes_efficiently
 
-from compr_meshgen import create_compr_walls, create_insert
 
 
 class cd:
@@ -57,6 +57,17 @@ def iter_params(json_path: str = 'params.json'):
     with open(json_path, 'r') as f_params:
         params = json.load(f_params, object_pairs_hook=OrderedDict)
 
+    # Handle shape parameters - create lists for each shape property
+    shape_params = params['shape']
+    
+    # Create lists for shape parameters, using defaults if not specified
+    shape_names = [shape_params.get('name', 'sphere')] if isinstance(shape_params.get('name'), str) else shape_params.get('name', ['sphere'])
+    vert_ars = [shape_params.get('vert_ar', 1.0)] if isinstance(shape_params.get('vert_ar'), (int, float)) else shape_params.get('vert_ar', [1.0])
+    horiz_ars = [shape_params.get('horiz_ar', 1.0)] if isinstance(shape_params.get('horiz_ar'), (int, float)) else shape_params.get('horiz_ar', [1.0])
+    n_corners_list = [shape_params.get('n_corners', 6)] if isinstance(shape_params.get('n_corners'), int) else shape_params.get('n_corners', [6])
+    sq_degrees = [shape_params.get('sq_degree', 1.0)] if isinstance(shape_params.get('sq_degree'), (int, float)) else shape_params.get('sq_degree', [1.0])
+    particle_paths = [shape_params.get('particle_path', '')] if isinstance(shape_params.get('particle_path'), str) else shape_params.get('particle_path', [''])
+
     # Find all combinations of parameters
     param_combinations = itertools.product(
         params['particle_properties']['radius'],
@@ -75,7 +86,13 @@ def iter_params(json_path: str = 'params.json'):
         params['contact_model']['normal'],
         params['contact_model']['tangential'],
         params['contact_model']['rolling'],
-        params['contact_model']['adhesion']
+        params['contact_model']['adhesion'],
+        shape_names,
+        vert_ars,
+        horiz_ars,
+        n_corners_list,
+        sq_degrees,
+        particle_paths
     )
 
     pprint(params)
@@ -187,7 +204,6 @@ def make_cases(
         os.makedirs(shared_mesh_dir, exist_ok=True)
 
         # Generate meshes only once for each unique size
-        from compr_meshgen import create_meshes_efficiently
         create_meshes_efficiently(size, meshsize=0.01, out_dir=shared_mesh_dir)
 
         size_to_mesh_dir[size] = shared_mesh_dir
@@ -216,11 +232,19 @@ def make_cases(
             'TANG_MODEL': params[14],
             'ROLLING_MODEL': params[15],
             'ADH_MODEL': params[16],
+            'SHAPE': params[17],
+            'VERT_AR': params[18],
+            'HORIZ_AR': params[19],
+            'N_CORNERS': params[20],
+            'SQ_DEGREE': params[21],
+            'PARTICLE_PATH': params[22],
             'MESH_DIR': str(meshdir),
         }
 
-        if params[16] != '"none"':
+        if params[15] != '"none"':
             script_contxt['ROLLING_FRICTION'] = params[6]
+        
+        print(params)
 
         # Render template and write script
         rendered_content = rocky_template.render(script_contxt)
@@ -256,6 +280,6 @@ def make_cases(
 if __name__ == "__main__":
     make_cases(
         sweep_name='test',
-        json_path='json/test.json',
+        json_path='params.json',
         autolaunch=True
     )
