@@ -241,6 +241,7 @@ def make_cases(
             'N_CORNERS': params[-1].get('n_corners', 8),
             'SQ_DEGREE': params[-1].get('sq_degree', 2.0),
             'PARTICLE_PATH': params[-1].get('particle_path', ''),
+            'SMOOTHNESS': params[-1].get('smoothness', 0.5),
             'MESH_DIR': str(meshdir),
         }
 
@@ -282,7 +283,7 @@ def make_cases(
 
 if __name__ == "__main__":
     make_cases(
-        sweep_name='test',
-        json_path='params.json',
+        sweep_name='shape_tests',
+        json_path='json/shape_tests.json',
         autolaunch=True
     )

@@ -109,7 +109,7 @@ def find_faulty_runs(sweep_name: str, dump: bool = False):
 
 if __name__ == "__main__":
     
-    sweep_name = "test"
+    sweep_name = "shape_tests"
 
     dump_db(sweep_name=sweep_name)
     find_faulty_runs(sweep_name=sweep_name)

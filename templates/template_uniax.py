@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 
 # Import particle shapes usingg importlib
 shapes_spec = importlib.util.spec_from_file_location(
-    'particles_shapes', os.path.abspath('../../particles_shapes.py'))
+    'particles_shapes', os.path.abspath('../../../particles_shapes.py'))
 if not shapes_spec:
     raise ImportError("Could not find the particles_shapes.py file.")
 particle_shapes = importlib.util.module_from_spec(shapes_spec)
@@ -301,14 +301,14 @@ def gen_particle(shape_dict: dict[str, float|str]) -> None:
     """
     Create a particle of a specific shape.
     """
-    global particle
-
+    global particle, study
+    study = app.GetStudy()
     particle = study.CreateParticle()
     shape = shape_dict.get("name")
     match shape:
         case "sphere":
             shape_obj = particle_shapes.Sphere(radius=P_RADIUS)
-        case "spherocylinder":
+        case "sphero_cylinder":
             vert_ar = shape_dict.get("vert_ar", 1.0)
             shape_obj = particle_shapes.SpheroCylinder(radius=P_RADIUS, vert_ar=vert_ar)
         case "polyhedron":
@@ -340,13 +340,7 @@ def gen_particle(shape_dict: dict[str, float|str]) -> None:
             )
         
     # Instantiate the shape for the particle
-    shape_obj.instantiate_shape(particle=particle)
-
-    if ROLLING_MODEL != 'none':
-        shape_obj.set_psd(material=particle_mat, rolling_friction=ROLLING_FRICTION)
-    else:
-        shape_obj.set_psd(material=particle_mat)
-
+    shape_obj.particle2rocky(particle=particle, material=particle_mat, rolling_friction=ROLLING_FRICTION)
 
 
 def sim_physics() -> None:
@@ -766,13 +760,23 @@ def post_process(plot: Optional[bool] = True,
                 'bulk_density_voidage.png'),
             dpi=300)
 
+
+    global particle
+    shape_name = particle.GetShape()
+    vert_ar = particle.GetVerticalAspectRatio()
+    horiz_ar = particle.GetHorizontalAspectRatio()
+    n_corners = particle.GetNumberOfCorners()
+    sq_degree = particle.GetSuperquadricDegree()
+    smoothness = particle.GetSmoothness() 
+
     col_vals = [
         P_RADIUS, P_DENSITY, P_YOUNGMOD, P_POISSON,
         PP_DYNAMIC_FRICTION, PP_STATIC_FRICTION, PP_COR,
         PW_DYNAMIC_FRICTION, PW_STATIC_FRICTION, PW_COR,
         ROLLING_FRICTION, COMPR_PRESSURE,
         NORMAL_FORCE_MODEL, TANGENTIAL_FORCE_MODEL, ADHESION_MODEL,
-        ROLLING_MODEL, PARTICLE_BOX_LEN, uncompr_dens, compr_dens,
+        ROLLING_MODEL, PARTICLE_BOX_LEN,  vert_ar, horiz_ar, n_corners,
+        sq_degree, smoothness, uncompr_dens, compr_dens,
         hausner_ratio, compr_idx
     ]
 
@@ -782,7 +786,8 @@ def post_process(plot: Optional[bool] = True,
         'pw_dynamic_friction', 'pw_static_friction', 'pw_cor',
         'rolling_friction', 'compression_pressure',
         'normal_force_model', 'tangential_force_model', 'adhesion_model',
-        'rolling_model', 'box_len', 'bulk_density', 'compressed_density',
+        'rolling_model', 'box_len', 'vert_ar', 'horiz_ar', 'n_corners',
+        'sq_degree', 'smoothness', 'bulk_density', 'compressed_density',
         'hausner_ratio', 'compression_index'
     ]
 
@@ -837,6 +842,11 @@ def post_process(plot: Optional[bool] = True,
             adhesion_model TEXT,
             rolling_model TEXT,
             box_len REAL,
+            vert_ar REAL,
+            horiz_ar REAL,
+            n_corners INTEGER,
+            sq_degree REAL,
+            smoothness REAL,
             bulk_density REAL,
             compressed_density REAL,
             hausner_ratio REAL,
@@ -848,7 +858,8 @@ def post_process(plot: Optional[bool] = True,
             pw_dynamic_friction, pw_static_friction, pw_cor,
             rolling_friction, compression_pressure,
             normal_force_model, tangential_force_model, adhesion_model,
-            rolling_model, box_len, bulk_density, compressed_density,
+            rolling_model, box_len, vert_ar, horiz_ar, n_corners,
+            sq_degree, smoothness, bulk_density, compressed_density,
             hausner_ratio, compression_index
         ) VALUES ({','.join(['?']*len(col_vals))})
         '''
@@ -857,6 +868,7 @@ def post_process(plot: Optional[bool] = True,
             cursor.execute(create_table_query)
             cursor.execute(insert_query, col_vals)
             conn.commit()
+
         except sqlite3.Error as e:
             raise RuntimeError(f"SQLite error: {e}")
 
@@ -871,7 +883,8 @@ shape_dict = {
     "horiz_ar": {{HORIZ_AR}},
     "n_corners": {{N_CORNERS}},
     "sq_degree": {{SQ_DEGREE}},
-    "particle_path": "{{PARTICLE_PATH}}"
+    "particle_path": "{{PARTICLE_PATH}}",
+    "smoothness": {{SMOOTHNESS}}
 }
 
 setup()
@@ -893,4 +906,3 @@ if particle_warning:
         f"Final particle count: {particle_rng[1]}. "
         f"Check the simulation settings and results."
     )
- 
