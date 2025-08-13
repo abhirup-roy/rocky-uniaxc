@@ -100,13 +100,17 @@ def iter_params(json_path: str = 'params.json'):
     return param_combinations
 
 
-def slurm_sbatch(case_dir: str, autolaunch: bool = False):
+def slurm_sbatch(case_dir: str, loc: str, autolaunch: bool = False, custom_msg: str = None):
     """Create a slurm sbatch script for each case.
     Change if needed.
     """
+
     # Define the sbatch script template
     # This is a simple template. You can modify it as needed.
-    template = """#!/bin/bash
+
+    # For UoB BlueBear use
+    if loc == 'bb-cpu':
+        template = """#!/bin/bash
 #SBATCH --job-name=uniaxc
 #SBATCH --ntasks=20
 #SBATCH --cpus-per-task=1
@@ -116,27 +120,42 @@ def slurm_sbatch(case_dir: str, autolaunch: bool = False):
 #SBATCH --mail-type=ALL
 #SBATCH --account=windowcr-astrazeneca-abhi
 
+set -e
 
 module purge; module load bluebear
 module load bear-apps/2023a
 module load ANSYS_Rocky/2024R2.0
 
+Rocky --script "script_uniax.py" --headless >> rocky.log
+    """
 
-#HOW TO USE:
+    # For AZ SCP use
+    elif loc == "az-gpu":
+        template="""#!/bin/bash -l
+#SBATCH -L uniaxc
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=1
+#SBATCH --time=5-0
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-gpu 1
 
-# --simulate  		Processes from the beginning, in hidden mode, the project file name and location that follows in quotes.
-# --ncpus=		Choose number
-# --resume=		0 for off, 1 for on
-# --use-gpu		0 for off, 1 for on
-# --gpu-num		Choose number
-# --script		Runs a script .py file, the name of which follows in quotes.
-# --headless		Process from the beginning, in hidden mode, the script .py file name of which follows in quotes.
+#SBATCH -p gpu
 
-# Run the application
+set -e
+
+ml rocky/24.2.0
 
 Rocky --script "script_uniax.py" --headless >> rocky.log
 
     """
+    elif loc == 'custom':
+        if custom_msg and custom_msg.startswith('#!/bin/bash'):
+            template = custom_msg
+        else:
+            raise ValueError('Invalid custom message provided')
+        
+    else:
+        raise ValueError('Only')
     # Write the sbatch script to a file
     write_path = os.path.join(case_dir, 'runRocky.sh')
 
@@ -161,9 +180,24 @@ def make_cases(
         meshdir: str = 'meshes',
         json_path: str = 'params.json',
         template_dir='templates',
-        autolaunch=True
+        autolaunch=True,
+        loc: str = 'bb-cpu',
+        custom_sh: str = None
 ):
-    """Generate and launch cases with improved performance."""
+    """
+    Generate and launch cases with improved performance.
+
+    Args:
+        sweep_name: A string for the title of the sweep being carried out
+        json_path: A path to the json config for the sweep or simulation
+        template_dir: A path to the script templates
+        autolaunch: Whether to automatically launch scripts
+        loc: Specify cluster script to use. Currently only works with
+            'az-gpu', 'bb-cpu', 'custom'. N.B. If using custom, specify
+            the `custom_sh` arg
+        custom_sh: A custom SLURM script to run simulations. Only needed if
+            using `loc=custom`
+    """
     # Ensure the template directory exists
     template_dir = os.path.abspath(template_dir)
     if not os.path.exists(template_dir):
@@ -261,7 +295,7 @@ def make_cases(
         print(f"Case {i}/{total_cases} prepared")
 
         # Create SLURM script
-        slurm_sbatch(case_dir, autolaunch=False)  # Don't launch yet
+        slurm_sbatch(case_dir, loc=loc, autolaunch=False, custom_msg=custom_sh)  # Don't launch yet
 
     # Launch all cases at once if requested
     if autolaunch:
@@ -285,5 +319,6 @@ if __name__ == "__main__":
     make_cases(
         sweep_name='shape_tests',
         json_path='json/shape_tests.json',
-        autolaunch=True
+        autolaunch=True,
+        loc='az-gpu'
     )
