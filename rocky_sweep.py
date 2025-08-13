@@ -51,8 +51,13 @@ class cd:
         os.chdir(self.savedPath)
 
 
-def iter_params(json_path: str = 'params.json'):
-    """Iterate over all parameter combinations."""
+def iter_params(json_path: str):
+    """
+    Iterate over all parameter combinations.
+
+    Args:
+        json_path: Path to json config for sweep
+    """
     # Load the JSON file
     with open(json_path, 'r') as f_params:
         params = json.load(f_params, object_pairs_hook=OrderedDict)
@@ -184,7 +189,7 @@ def make_cases(
         custom_sh: str = None
 ):
     """
-    Generate and launch cases with improved performance.
+    Generate and launch sweep cases
 
     Args:
         sweep_name: A string for the title of the sweep being carried out
