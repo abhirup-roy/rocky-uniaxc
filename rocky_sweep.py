@@ -186,7 +186,8 @@ def make_cases(
         template_dir='templates',
         autolaunch=True,
         loc: str = 'bb-cpu',
-        custom_sh: str = None
+        custom_sh: str = None,
+        target: str = 'CPU'
 ):
     """
     Generate and launch sweep cases
@@ -206,7 +207,16 @@ def make_cases(
     template_dir = os.path.abspath(template_dir)
     if not os.path.exists(template_dir):
         raise FileNotFoundError(f"Directory {template_dir} does not exist.")
-
+    
+    target = target.upper()
+    if target not in ['CPU', 'GPU', 'MULTI_GPU']:
+        raise ValueError("Select from 'CPU', 'GPU', 'MULTI_GPU'")
+    elif target == 'MULTI_GPU':
+        raise NotImplementedError('Multi GPU use not validated yet')
+    
+    if (loc == 'bb-cpu' and target == 'GPU') or (loc == 'az-gpu' and target == 'CPU'):
+        raise ValueError(f'{target} is not valid for location {loc}')
+    target = '"' + target + '"'
     # Load template once
     rocky_templ_env = jinja2.Environment(
         loader=jinja2.FileSystemLoader(f'{template_dir}')
@@ -281,6 +291,7 @@ def make_cases(
             'PARTICLE_PATH': params[-1].get('particle_path', ''),
             'SMOOTHNESS': params[-1].get('smoothness', 0.5),
             'MESH_DIR': str(meshdir),
+            'XPU': target
         }
 
         if params[15] != '"none"':
@@ -324,5 +335,6 @@ if __name__ == "__main__":
         sweep_name='shape_tests',
         json_path='params.json',
         autolaunch=True,
-        loc='az-gpu'
+        loc='az-gpu',
+        target='GPU'
     )

@@ -91,7 +91,7 @@ NEIGHBOUR_SEARCH = None
 if NEIGHBOUR_SEARCH is not None:
     assert NEIGHBOUR_SEARCH in ['BVH', 'RegularGrid', 'SparseGrid']
 
-PROCESSOR: str = 'CPU'
+PROCESSOR: str = {{XPU}}
 assert PROCESSOR in ['CPU', 'GPU', 'MULTI_GPU']
 RUNTIME: float = 5.  # s
 assert RUNTIME >= sum([T_FILL, T_SETTLE, T_COMPRESSION])
@@ -468,6 +468,21 @@ def simulate(autotimestep: bool=True, timestep=None) -> None:
         print(f"Simulation Progress: {study.GetProgress():.2f} %")
     print("Simulation completed.")
 
+def _select_processor(solver, processor: str):
+    if processor == 'GPU':
+        if processor not in solver.GetValidSimulationTargetValues():
+            warning_path = os.path.join(PROJECT_DIR, 'warnings.txt')
+            write_mode = 'w' if os.path.exists(warning_path) else 'a'
+            with open(warning_path, write_mode) as f:
+                f.write('GPU was not available - switching to CPU')
+            solver.SetSimulationTarget('CPU')
+        else:
+            solver.SetSimulationTarget('GPU')
+            
+    elif processor == 'CPU':
+        solver.SetSimulationTarget('CPU')
+        solver.SetNumberOfProcessors(NPROCS)
+
 def settle_particles(autotimestep: bool=True, timestep=None):
     """
     Simulate the settling of particles in the domain.
@@ -497,6 +512,9 @@ def settle_particles(autotimestep: bool=True, timestep=None):
 
     solver = study.GetSolver()
     solver.SetSimulationDuration(T_SETTLE, 's')
+
+    _select_processor(solver=solver, processor=PROCESSOR)
+
     study.StartSimulation()
     while study.IsSimulating():
         study.RefreshResults()
@@ -539,6 +557,7 @@ def compress_particles(autotimestep: Optional[bool]=True,
     """
 
     global study, project, top_wall, wall_pos, T_LOWER
+
     if not _run_flag:
         return
     T_LOWER = t_lower
@@ -580,6 +599,8 @@ def compress_particles(autotimestep: Optional[bool]=True,
     solver = study.GetSolver()
     solver.SetSimulationDuration(T_COMPRESSION, 's')
 
+    _select_processor(solver=solver, processor=PROCESSOR)
+
     if not autotimestep:
         if not timestep:
             solver.SetUseFixedTimestep(True)
@@ -588,7 +609,9 @@ def compress_particles(autotimestep: Optional[bool]=True,
             solver.SetUseFixedTimestep(True)
             solver.SetFixedTimestep(timestep, 's')
 
+    project.SaveProject()
     study.StartSimulation()
+
     project.SaveProject()
 
 def _calc_bulk_dens(particles, time_step, sample_frac=0.8) -> float:
