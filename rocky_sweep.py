@@ -100,15 +100,15 @@ def iter_params(json_path: str = 'params.json'):
     return param_combinations
 
 
-def slurm_sbatch(case_dir: str, autolaunch: bool = False):
+def slurm_sbatch(case_dir: str, autolaunch: bool = False, ncpus: int = 20):
     """Create a slurm sbatch script for each case.
     Change if needed.
     """
     # Define the sbatch script template
     # This is a simple template. You can modify it as needed.
-    template = """#!/bin/bash
+    template = f"""#!/bin/bash
 #SBATCH --job-name=uniaxc
-#SBATCH --ntasks=20
+#SBATCH --ntasks={ncpus}
 #SBATCH --cpus-per-task=1
 #SBATCH --nodes=1
 #SBATCH --time=5-0
@@ -157,11 +157,12 @@ Rocky --script "script_uniax.py" --headless >> rocky.log
 
 
 def make_cases(
-        sweep_name: str,
-        meshdir: str = 'meshes',
-        json_path: str = 'params.json',
-        template_dir='templates',
-        autolaunch=True
+    sweep_name: str,
+    meshdir: str = 'meshes',
+    json_path: str = 'params.json',
+    template_dir: str ='templates',
+    autolaunch: bool = True,
+    ncpus: int = 20
 ):
     """Generate and launch cases with improved performance."""
     # Ensure the template directory exists
@@ -247,7 +248,7 @@ def make_cases(
 
         if params[15] != '"none"':
             script_contxt['ROLLING_FRICTION'] = params[6]
-        
+
         print(params)
 
         # Render template and write script
@@ -261,7 +262,7 @@ def make_cases(
         print(f"Case {i}/{total_cases} prepared")
 
         # Create SLURM script
-        slurm_sbatch(case_dir, autolaunch=False)  # Don't launch yet
+        slurm_sbatch(case_dir, autolaunch=False, ncpus=ncpus)  # Don't launch yet
 
     # Launch all cases at once if requested
     if autolaunch:
@@ -283,7 +284,8 @@ def make_cases(
 
 if __name__ == "__main__":
     make_cases(
-        sweep_name='shape_tests',
-        json_path='json/shape_tests.json',
-        autolaunch=True
+        sweep_name='polyh_corners_highcpu',
+        json_path='json/polyh_corners.json',
+        autolaunch=True,
+        ncpus=64
     )
