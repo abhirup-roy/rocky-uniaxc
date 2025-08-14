@@ -51,8 +51,13 @@ class cd:
         os.chdir(self.savedPath)
 
 
-def iter_params(json_path: str = 'params.json'):
-    """Iterate over all parameter combinations."""
+def iter_params(json_path: str):
+    """
+    Iterate over all parameter combinations.
+
+    Args:
+        json_path: Path to json config for sweep
+    """
     # Load the JSON file
     with open(json_path, 'r') as f_params:
         params = json.load(f_params, object_pairs_hook=OrderedDict)
@@ -100,13 +105,21 @@ def iter_params(json_path: str = 'params.json'):
     return param_combinations
 
 
-def slurm_sbatch(case_dir: str, autolaunch: bool = False, ncpus: int = 20):
+def slurm_sbatch(case_dir: str, loc: str, autolaunch: bool = False, 
+    custom_msg: str = None, ncpus: int = None):
     """Create a slurm sbatch script for each case.
     Change if needed.
     """
+
+    if loc == 'bb-cpu' and not ncpus:
+        ncpus = 20
+
     # Define the sbatch script template
     # This is a simple template. You can modify it as needed.
-    template = f"""#!/bin/bash
+
+    # For UoB BlueBear use
+    if loc == 'bb-cpu':
+        template = f"""#!/bin/bash
 #SBATCH --job-name=uniaxc
 #SBATCH --ntasks={ncpus}
 #SBATCH --cpus-per-task=1
@@ -116,27 +129,41 @@ def slurm_sbatch(case_dir: str, autolaunch: bool = False, ncpus: int = 20):
 #SBATCH --mail-type=ALL
 #SBATCH --account=windowcr-astrazeneca-abhi
 
+set -e
 
 module purge; module load bluebear
 module load bear-apps/2023a
 module load ANSYS_Rocky/2024R2.0
 
+Rocky --script "script_uniax.py" --headless >> rocky.log
+    """
 
-#HOW TO USE:
+    # For AZ SCP use
+    elif loc == "az-gpu":
+        template="""#!/bin/sh
+#SBATCH -L uniaxc
+#SBATCH --ntasks=1
+#SBATCH --time=5-0
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-gpu=1
+#SBATCH -p gpu
+#SBATCH -L ansys:1
 
-# --simulate  		Processes from the beginning, in hidden mode, the project file name and location that follows in quotes.
-# --ncpus=		Choose number
-# --resume=		0 for off, 1 for on
-# --use-gpu		0 for off, 1 for on
-# --gpu-num		Choose number
-# --script		Runs a script .py file, the name of which follows in quotes.
-# --headless		Process from the beginning, in hidden mode, the script .py file name of which follows in quotes.
+set -e
 
-# Run the application
+ml rocky/24.2.0
 
 Rocky --script "script_uniax.py" --headless >> rocky.log
 
     """
+    elif loc == 'custom':
+        if custom_msg and custom_msg.startswith('#!/bin/bash'):
+            template = custom_msg
+        else:
+            raise ValueError('Invalid custom message provided')
+        
+    else:
+        raise ValueError('Only')
     # Write the sbatch script to a file
     write_path = os.path.join(case_dir, 'runRocky.sh')
 
@@ -157,19 +184,44 @@ Rocky --script "script_uniax.py" --headless >> rocky.log
 
 
 def make_cases(
-    sweep_name: str,
-    meshdir: str = 'meshes',
-    json_path: str = 'params.json',
-    template_dir: str ='templates',
-    autolaunch: bool = True,
-    ncpus: int = 20
+        sweep_name: str,
+        meshdir: str = 'meshes',
+        json_path: str = 'params.json',
+        template_dir='templates',
+        autolaunch=True,
+        loc: str = 'bb-cpu',
+        custom_sh: str = None,
+        target: str = 'CPU',
+        ncpus: int = None
 ):
-    """Generate and launch cases with improved performance."""
+    """
+    Generate and launch sweep cases
+
+    Args:
+        sweep_name: A string for the title of the sweep being carried out
+        json_path: A path to the json config for the sweep or simulation
+        template_dir: A path to the script templates
+        autolaunch: Whether to automatically launch scripts
+        loc: Specify cluster script to use. Currently only works with
+            'az-gpu', 'bb-cpu', 'custom'. N.B. If using custom, specify
+            the `custom_sh` arg
+        custom_sh: A custom SLURM script to run simulations. Only needed if
+            using `loc=custom`
+    """
     # Ensure the template directory exists
     template_dir = os.path.abspath(template_dir)
     if not os.path.exists(template_dir):
         raise FileNotFoundError(f"Directory {template_dir} does not exist.")
-
+    
+    target = target.upper()
+    if target not in ['CPU', 'GPU', 'MULTI_GPU']:
+        raise ValueError("Select from 'CPU', 'GPU', 'MULTI_GPU'")
+    elif target == 'MULTI_GPU':
+        raise NotImplementedError('Multi GPU use not validated yet')
+    
+    if (loc == 'bb-cpu' and target == 'GPU') or (loc == 'az-gpu' and target == 'CPU'):
+        raise ValueError(f'{target} is not valid for location {loc}')
+    target = '"' + target + '"'
     # Load template once
     rocky_templ_env = jinja2.Environment(
         loader=jinja2.FileSystemLoader(f'{template_dir}')
@@ -244,6 +296,7 @@ def make_cases(
             'PARTICLE_PATH': params[-1].get('particle_path', ''),
             'SMOOTHNESS': params[-1].get('smoothness', 0.5),
             'MESH_DIR': str(meshdir),
+            'XPU': target
         }
 
         if params[15] != '"none"':
@@ -262,7 +315,7 @@ def make_cases(
         print(f"Case {i}/{total_cases} prepared")
 
         # Create SLURM script
-        slurm_sbatch(case_dir, autolaunch=False, ncpus=ncpus)  # Don't launch yet
+        slurm_sbatch(case_dir, loc=loc, autolaunch=False, custom_msg=custom_sh, ncpus=ncpus)  # Don't launch yet
 
     # Launch all cases at once if requested
     if autolaunch:
@@ -284,8 +337,9 @@ def make_cases(
 
 if __name__ == "__main__":
     make_cases(
-        sweep_name='polyh_corners_highcpu',
-        json_path='json/polyh_corners.json',
+        sweep_name='shape_tests',
+        json_path='params.json',
         autolaunch=True,
-        ncpus=64
+        loc='az-gpu',
+        target='GPU'
     )
