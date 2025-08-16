@@ -390,28 +390,28 @@ def iter_ofat(json_path: str, ofat_values: dict[str, list|str], n_points:int):
         raise ValueError("OFAT values must contain 'parameters', 'test_range', and 'hold_values' keys.")
 
     ofat_base_valid = {
-        'radius': params['particle_properties']['radius'],
-        'density': params['particle_properties']['density'],
-        'poisson': params['particle_properties']['poisson'],
-        'youngmod': params['particle_properties']['youngmod'],
-        'fric_dyn_pp': params['inseractions']['pp']['fric_dyn'],
-        'fric_stat_pp': params['inseractions']['pp']['fric_stat'],
-        'fric_rolling_pp': params['inseractions']['pp']['fric_rolling'],
-        'cor_pp': params['inseractions']['pp']['cor'],
-        'fric_dyn_pw': params['inseractions']['pw']['fric_dyn'],    
-        'fric_stat_pw': params['inseractions']['pw']['fric_stat'],
-        'cor_pw': params['inseractions']['pw']['cor'],
-        'box_len': params['experim_settings']['box_len'],
-        'p_compress': params['experim_settings']['p_compress'],
-        'normal': params['contact_model']['normal'],
-        'tangential': params['contact_model']['tangential'],
-        'rolling': params['contact_model']['rolling'],
-        'adhesion': params['contact_model']['adhesion'],
-        'shape': params['shape']['name'],
-        'vert_ar': params['shape']['vert_ar'],
-        'horiz_ar': params['shape']['horiz_ar'],
-        'n_corners': params['shape']['n_corners'],
-        'sq_degree': params['shape']['sq_degree'],
+        'radius': params['particle_properties']['radius'],  # float
+        'density': params['particle_properties']['density'],  # float
+        'poisson': params['particle_properties']['poisson'],  # float
+        'youngmod': params['particle_properties']['youngmod'],  # float
+        'fric_dyn_pp': params['inseractions']['pp']['fric_dyn'],  # float
+        'fric_stat_pp': params['inseractions']['pp']['fric_stat'],  # float
+        'fric_rolling_pp': params['inseractions']['pp']['fric_rolling'],  # float
+        'cor_pp': params['inseractions']['pp']['cor'],  # float
+        'fric_dyn_pw': params['inseractions']['pw']['fric_dyn'],  # float
+        'fric_stat_pw': params['inseractions']['pw']['fric_stat'],  # float
+        'cor_pw': params['inseractions']['pw']['cor'],  # float
+        'box_len': params['experim_settings']['box_len'],  # float
+        'p_compress': params['experim_settings']['p_compress'],  # float
+        'normal': params['contact_model']['normal'],  # float
+        'tangential': params['contact_model']['tangential'],  # float
+        'rolling': params['contact_model']['rolling'],  # float
+        'adhesion': params['contact_model']['adhesion'],  # float
+        'shape': params['shape']['name'],  # string
+        'vert_ar': params['shape']['vert_ar'],  # float
+        'horiz_ar': params['shape']['horiz_ar'],  # float
+        'n_corners': params['shape']['n_corners'],  # int
+        'sq_degree': params['shape']['sq_degree'], # float
     }
 
 
@@ -467,11 +467,12 @@ def iter_ofat(json_path: str, ofat_values: dict[str, list|str], n_points:int):
     
     levels = {}
     for i, rng in enumerate(ofat_values['test_range']):
-        lb, ub = ofat_values['test_range'][i]
+        lb, ub = rng
         if lb >= ub:
             raise ValueError(f"Invalid range for parameter '{ofat_values['parameters'][i]}': ({lb}, {ub})")
 
-        levels_i = np.linspace(lb, ub, n_points)
+        dtype = int if ofat_values['parameters'][i] == 'n_corners' else float
+        levels_i = np.linspace(lb, ub, n_points, dtype=dtype)
         if ofat_values['hold_values'][i] == 'h':
             hold_i = levels_i[-1]
         elif ofat_values['hold_values'][i] == 'l':
@@ -655,7 +656,7 @@ if __name__ == "__main__":
 
     """Example of a regular sweep"""
     # make_cases(
-    #     sweep_name='shape_tests',
+    #     sweep_name='reg_sweep_example',
     #     json_path='json/sweep_reg.json',
     #     autolaunch=True,
     #     loc='az-gpu',
@@ -663,17 +664,17 @@ if __name__ == "__main__":
     # )
 
     """Example of an OFAT sweep"""
-    launch_ofat(
-        'test',
-        autolaunch=True,
-        json_path='json/ofat_base.json',
-        ofat_values={
-            'parameters':['n_corners', 'sq_degree'],
-            'test_range':[(5, 50), (2.0, 10.0)],
-            'hold_values': ['m', 'm']
-        },
-        n_points=5,
-        loc='bb-cpu',
-        target='CPU',
-        ncpus=20
-    )
+    # launch_ofat(
+    #     'ofat_example',
+    #     autolaunch=True,
+    #     json_path='json/ofat_base.json',
+    #     ofat_values={
+    #         'parameters':['n_corners', 'sq_degree'],
+    #         'test_range':[(5, 50), (2.0, 10.0)],
+    #         'hold_values': ['m', 'm']
+    #     },
+    #     n_points=5,
+    #     loc='bb-cpu',
+    #     target='CPU',
+    #     ncpus=20
+    # )
