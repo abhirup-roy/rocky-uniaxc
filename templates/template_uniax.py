@@ -614,7 +614,7 @@ def compress_particles(autotimestep: Optional[bool]=True,
 
     project.SaveProject()
 
-def _calc_bulk_dens(particles, time_step, sample_frac=0.8) -> float:
+def _calc_bulk_dens(particles, time_step, sample_frac=0.9) -> float:
     x_coords = particles.GetGridFunction(
         'Coordinate : X').GetArray(time_step=time_step)
     y_coords = particles.GetGridFunction(
@@ -709,7 +709,7 @@ def _calc_bulk_dens_v2(particles, time_step, sample_frac=0.8) -> tuple:
 
 
 def post_process(plot: Optional[bool] = True, 
-                 bulk_dens_method: Optional[str]='precise') -> None:
+                 bulk_dens_method: Optional[str]='sample') -> None:
     """
     Post-process the simulation results. Includes calculating bulk density,
     voidage, Hausner ratio, and compression index. Optionally plots the results.
@@ -717,8 +717,8 @@ def post_process(plot: Optional[bool] = True,
     **Parameters:**
     - `plot` (bool): If True, generates plots of bulk density and voidage over time.
     - `bulk_dens_method` (str): Method to calculate bulk density. Options are 'precise' or 'sample'.
-            Precises uses a more accurate method based on particle positions, considering cuttoffs
-            while 'sample' uses a sampling method based on a fraction of the domain.
+            'precise' uses an analytical method based on particle positions, considering cuttoffs. 
+            'corase' uses a sampling method based on a fraction of the domain.
     """
     global study, project
 
@@ -730,9 +730,9 @@ def post_process(plot: Optional[bool] = True,
     if bulk_dens_method == 'precise':
         uncompr_dens, voidage = _calc_bulk_dens_v2(particles, settled_timestep)
         compr_dens, voidage = _calc_bulk_dens_v2(particles, -1)
-    elif bulk_dens_method == 'coarse':
-        bulk_dens = _calc_bulk_dens(particles, settled_timestep)
-        compr_dens = _calc_bulk_dens(particles, -1)
+    elif bulk_dens_method == 'sample':
+        bulk_dens = _calc_bulk_dens(particles, settled_timestep, 0.9)
+        compr_dens = _calc_bulk_dens(particles, -1, 0.9)
 
     hausner_ratio = compr_dens / uncompr_dens
     compr_idx = 100 * (compr_dens - uncompr_dens) / compr_dens
@@ -742,47 +742,66 @@ def post_process(plot: Optional[bool] = True,
     if plot:
         PLOTS_DIR = os.path.join(PROJECT_DIR, 'plots')
         for timestep in np.nditer(time_set, flags=['refs_ok']):
-            bulk_dens_ts, voidage_ts = _calc_bulk_dens_v2(
-                particles, timestep.item()
+            bulk_dens_ts = _calc_bulk_dens(
+                particles, timestep.item(),
+                sample_frac=0.9
             )
             bulk_dens.append(bulk_dens_ts)
-            voidage.append(voidage_ts)
+            if bulk_dens_method == 'precise':
+                voidage.append(voidage_ts)
         bulk_dens_t = np.array(bulk_dens)
-        voidage_t = np.array(voidage)
+        voidage_t = np.array(voidage) if bulk_dens_method == 'precise' else None
 
-        # Create a plot with two y-axes
-        fig, ax1 = plt.subplots(figsize=(10, 6))
+        if bulk_dens_method == 'precise':
+            # Create a plot with two y-axes
+            fig, ax1 = plt.subplots(figsize=(10, 6))
 
-        # Plot bulk density on the left y-axis
-        color = 'tab:blue'
-        ax1.set_xlabel('Time (s)')
-        ax1.set_ylabel('Bulk Density (kg/m³)', color=color)
-        ax1.plot(timeset_arr, bulk_dens_t, color=color)
-        ax1.tick_params(axis='y', labelcolor=color)
+            # Plot bulk density on the left y-axis
+            color = 'tab:blue'
+            ax1.set_xlabel('Time (s)')
+            ax1.set_ylabel('Bulk Density (kg/m³)', color=color)
+            ax1.plot(timeset_arr, bulk_dens_t, color=color)
+            ax1.tick_params(axis='y', labelcolor=color)
 
-        # Create a second y-axis for voidage
-        ax2 = ax1.twinx()
-        color = 'tab:red'
-        ax2.set_ylabel('Voidage', color=color)
-        ax2.plot(timeset_arr, voidage_t, color=color)
-        ax2.tick_params(axis='y', labelcolor=color)
+            # Create a second y-axis for voidage
+            ax2 = ax1.twinx()
+            color = 'tab:red'
+            ax2.set_ylabel('Voidage', color=color)
+            ax2.plot(timeset_arr, voidage_t, color=color)
+            ax2.tick_params(axis='y', labelcolor=color)
 
-        # Add title and grid
-        plt.title('Bulk Density and Voidage vs Time')
-        ax1.grid(True, alpha=0.3)
+            # Add title and grid
+            plt.title('Bulk Density and Voidage vs Time')
+            ax1.grid(True, alpha=0.3)
 
-        # Add legend
-        lines1, labels1 = ax1.get_legend_handles_labels()
-        lines2, labels2 = ax2.get_legend_handles_labels()
-        ax1.legend(lines1 + lines2, labels1 + labels2, loc='best')
+            # Add legend
+            lines1, labels1 = ax1.get_legend_handles_labels()
+            lines2, labels2 = ax2.get_legend_handles_labels()
+            ax1.legend(lines1 + lines2, labels1 + labels2, loc='best')
 
-        fig.tight_layout()
-        plt.savefig(
-            os.path.join(
-                PLOTS_DIR,
-                'bulk_density_voidage.png'),
-            dpi=300)
+            fig.tight_layout()
+            plt.savefig(
+                os.path.join(
+                    PLOTS_DIR,
+                    'bulk_density_voidage.png'),
+                dpi=300)
+        else:
+            fig, ax = plt.subplots(figsize=(10, 6))
+            color = 'tab:blue'
+            ax.set_xlabel('Time (s)')
+            ax.set_ylabel('Bulk Density (kg/m³)', color=color)
+            ax.plot(timeset_arr, bulk_dens_t, color=color)
+            ax.tick_params(axis='y', labelcolor=color)
 
+            ax.set_title('Bulk Density vs Time')
+            ax.grid(True, alpha=0.3)
+
+            fig.tight_layout()
+            fig.savefig(
+                os.path.join(
+                    PLOTS_DIR,
+                    'bulk_density_voidage.png'),
+                dpi=300)
 
     global particle
     shape_name = particle.GetShape()

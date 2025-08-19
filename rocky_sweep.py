@@ -620,7 +620,9 @@ def launch_ofat(sweep_name: str, autolaunch: bool, json_path:str,
 
         if params['rolling'] != 'none':
             script_contxt['ROLLING_FRICTION'] = params['rolling']
-        
+        else:
+            script_contxt['ROLLING_FRICTION'] = None
+
         rendered_content = rocky_template.render(script_contxt)
         script_path = os.path.join(case_dir, 'script_uniax.py')
 
@@ -657,7 +659,7 @@ if __name__ == "__main__":
     """Example of a regular sweep"""
     # make_cases(
     #     sweep_name='reg_sweep_example',
-    #     json_path='json/sweep_reg.json',
+    #     json_path='json/swesp_reg.json',
     #     autolaunch=True,
     #     loc='az-gpu',
     #     target='GPU'
