@@ -41,10 +41,13 @@ PW_DYNAMIC_FRICTION: float = {{DYNAMIC_FRICTION_PW}}
 PW_STATIC_FRICTION: float = {{STATIC_FRICTION_PW}}
 PW_COR: float = {{COR_PW}}
 
-for _p in [
+for i,_p in enumerate([
     PP_DYNAMIC_FRICTION, PP_STATIC_FRICTION, PP_COR,
     PW_DYNAMIC_FRICTION, PW_STATIC_FRICTION, PW_COR,
-    ROLLING_FRICTION, P_POISSON]:
+    ROLLING_FRICTION, P_POISSON]):
+
+    if (i == 6) and (ROLLING_MODEL == 'none') and (not _p):
+        continue
     if _p < 0 or _p > 1:
         raise ValueError(
             f"Expected a value between 0 and 1."
