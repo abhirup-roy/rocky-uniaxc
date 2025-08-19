@@ -101,7 +101,7 @@ assert RUNTIME >= sum([T_FILL, T_SETTLE, T_COMPRESSION])
 
 # Paths
 PROJECT_DIR = os.getcwd()
-MESHDIR = os.path.abspath(f'../{{MESH_DIR}}_{PARTICLE_BOX_LEN}')
+MESHDIR = os.path.abspath(f'../meshes_{PARTICLE_BOX_LEN}')
 
 # Paths to the Rocky executable - for PyRocky implementation
 # BB_ROCKY_PATH = '/rds/bear-apps/2023a/EL8-ice/software/ANSYS_Rocky/2024R2.0/bin/Rocky'

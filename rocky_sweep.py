@@ -615,7 +615,8 @@ def launch_ofat(sweep_name: str, autolaunch: bool, json_path:str,
             'SQ_DEGREE': params.get('sq_degree'),
             'PARTICLE_PATH': params.get('particle_path'),
             'SMOOTHNESS': params.get('smoothness', 0.5),
-            'XPU': target
+            'XPU': target,
+            'MESH_DIR': 'meshes'
         }
 
         if params['rolling'] != 'none':
@@ -666,17 +667,17 @@ if __name__ == "__main__":
     # )
 
     """Example of an OFAT sweep"""
-    # launch_ofat(
-    #     'ofat_example',
-    #     autolaunch=True,
-    #     json_path='json/ofat_base.json',
-    #     ofat_values={
-    #         'parameters':['n_corners', 'sq_degree'],
-    #         'test_range':[(5, 50), (2.0, 10.0)],
-    #         'hold_values': ['m', 'm']
-    #     },
-    #     n_points=5,
-    #     loc='bb-cpu',
-    #     target='CPU',
-    #     ncpus=20
-    # )
+    launch_ofat(
+        'ofat_example',
+        autolaunch=True,
+        json_path='json/ofat_base.json',
+        ofat_values={
+            'parameters':['n_corners', 'sq_degree'],
+            'test_range':[(5, 50), (2.0, 10.0)],
+            'hold_values': ['m', 'm']
+        },
+        n_points=5,
+        loc='bb-cpu',
+        target='CPU',
+        ncpus=20
+    )
