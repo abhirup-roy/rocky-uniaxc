@@ -12,7 +12,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-# Import particle shapes usingg importlib
+# Import particle shapes using importlib
 shapes_spec = importlib.util.spec_from_file_location(
     'particles_shapes', os.path.abspath('../../../particles_shapes.py'))
 if not shapes_spec:
@@ -23,7 +23,7 @@ shapes_spec.loader.exec_module(particle_shapes)
 
 
 # Particle properties
-P_RADIUS: float = {{RADIUS_P}}  # m
+P_RADIUS: float | dict = {{RADIUS_P}}  # m
 P_DENSITY: float = {{DENSITY_P}}  # kg/m^3
 P_YOUNGMOD: float = {{YOUNGMOD_P}}  # Pa
 P_POISSON: float = {{POISSON_P}}  # Poisson ratio
@@ -41,10 +41,10 @@ PW_DYNAMIC_FRICTION: float = {{DYNAMIC_FRICTION_PW}}
 PW_STATIC_FRICTION: float = {{STATIC_FRICTION_PW}}
 PW_COR: float = {{COR_PW}}
 
-for i,_p in enumerate([
-    PP_DYNAMIC_FRICTION, PP_STATIC_FRICTION, PP_COR,
-    PW_DYNAMIC_FRICTION, PW_STATIC_FRICTION, PW_COR,
-    ROLLING_FRICTION, P_POISSON]):
+for i, _p in enumerate([
+        PP_DYNAMIC_FRICTION, PP_STATIC_FRICTION, PP_COR,
+        PW_DYNAMIC_FRICTION, PW_STATIC_FRICTION, PW_COR,
+        ROLLING_FRICTION, P_POISSON]):
 
     if (i == 6) and (ROLLING_MODEL == 'none') and (not _p):
         continue
@@ -162,7 +162,7 @@ def load_meshes() -> None:
     top_wall.SetName('Top Wall')
     top_wall.SetBoundaryMass(1e-6)
     top_wall.SetTranslation(
-        [-PARTICLE_BOX_LEN / 2, 0, 0 ]
+        [-PARTICLE_BOX_LEN / 2, 0, 0]
     )
 
     # Load bottom wall with a slight offset
@@ -300,7 +300,8 @@ def set_psd() -> None:
     if ROLLING_FRICTION != 'none':
         particle.SetRollingResistance(ROLLING_FRICTION)
 
-def gen_particle(shape_dict: dict[str, float|str]) -> None:
+
+def gen_particle(shape_dict: dict[str, float | str]) -> None:
     """
     Create a particle of a specific shape.
     """
@@ -313,7 +314,8 @@ def gen_particle(shape_dict: dict[str, float|str]) -> None:
             shape_obj = particle_shapes.Sphere(radius=P_RADIUS)
         case "sphero_cylinder":
             vert_ar = shape_dict.get("vert_ar", 1.0)
-            shape_obj = particle_shapes.SpheroCylinder(radius=P_RADIUS, vert_ar=vert_ar)
+            shape_obj = particle_shapes.SpheroCylinder(
+                radius=P_RADIUS, vert_ar=vert_ar)
         case "polyhedron":
             vert_ar = shape_dict.get("vert_ar", 1.0)
             horiz_ar = shape_dict.get("horiz_ar", 1.0)
@@ -322,7 +324,7 @@ def gen_particle(shape_dict: dict[str, float|str]) -> None:
 
             shape_obj = particle_shapes.Polyhedron(
                 radius=P_RADIUS, vert_ar=vert_ar,
-                horiz_ar=horiz_ar, n_corners=n_corners, 
+                horiz_ar=horiz_ar, n_corners=n_corners,
                 superquadric_degree=sq_degree
             )
         case "custom_polyhedron":
@@ -341,9 +343,12 @@ def gen_particle(shape_dict: dict[str, float|str]) -> None:
                 f"Unknown shape type: {shape}. "
                 "Supported shapes are: 'sphere', 'spherocylinder', 'polyhedron', 'custom_polyhedron'."
             )
-        
+
     # Instantiate the shape for the particle
-    shape_obj.particle2rocky(particle=particle, material=particle_mat, rolling_friction=ROLLING_FRICTION)
+    shape_obj.particle2rocky(
+        particle=particle,
+        material=particle_mat,
+        rolling_friction=ROLLING_FRICTION)
 
 
 def sim_physics() -> None:
@@ -410,6 +415,35 @@ def insertion_settings() -> None:
         )
 
 
+def move_top_wall():
+
+    frame_source = study.GetMotionFrameSource()
+    top_wall_frame = frame_source.NewFrame()
+
+    motions = top_wall_frame.GetMotions()
+
+    # Drop weightless wall
+    drop_wall_motion = motions.New()
+    drop_wall_motion.SetType('Free Body Translation')
+    free_body = drop_wall_motion.GetTypeObject()
+    free_body.SetFreeMotionDirection('x')
+    drop_wall_motion.SetStartTime(0)
+
+    # Start compression
+    # Account for wall mass
+    pressure = (COMPR_PRESSURE - 1e-6 * 9.81) * PARTICLE_BOX_LEN**2  # N
+    compr_motion = motions.New()
+    compr_motion.SetType('Additional Force')
+    add_force = compr_motion.GetTypeObject()
+    add_force.SetForceValue(
+        [pressure, 0, 0], 'N'
+    )
+    compr_motion.SetStartTime(T_SETTLE)
+    compr_motion.SetStopTime(T_SETTLE + T_COMPRESSION)
+
+    top_wall_frame.ApplyTo(top_wall)
+
+
 def set_domain_settings() -> None:
 
     if not _run_flag and not _resume_flag:
@@ -438,7 +472,23 @@ def set_domain_settings() -> None:
     )
 
 
-def simulate(autotimestep: bool=True, timestep=None) -> None:
+def _select_processor(solver, processor: str):
+    if processor == 'GPU':
+        if processor not in solver.GetValidSimulationTargetValues():
+            warning_path = os.path.join(PROJECT_DIR, 'warnings.txt')
+            write_mode = 'w' if os.path.exists(warning_path) else 'a'
+            with open(warning_path, write_mode) as f:
+                f.write('GPU was not available - switching to CPU')
+            solver.SetSimulationTarget('CPU')
+        else:
+            solver.SetSimulationTarget('GPU')
+
+    elif processor == 'CPU':
+        solver.SetSimulationTarget('CPU')
+        solver.SetNumberOfProcessors(NPROCS)
+
+
+def simulate(autotimestep: bool = True, timestep=None) -> None:
 
     if not _run_flag:
         return
@@ -447,7 +497,7 @@ def simulate(autotimestep: bool=True, timestep=None) -> None:
 
     study = project.GetStudy()
     solver = study.GetSolver()
-    solver.SetNumberOfProcessors(int(NPROCS))
+    _select_processor(solver=solver, processor=PROCESSOR)
 
     if not autotimestep:
         if not timestep:
@@ -471,151 +521,6 @@ def simulate(autotimestep: bool=True, timestep=None) -> None:
         print(f"Simulation Progress: {study.GetProgress():.2f} %")
     print("Simulation completed.")
 
-def _select_processor(solver, processor: str):
-    if processor == 'GPU':
-        if processor not in solver.GetValidSimulationTargetValues():
-            warning_path = os.path.join(PROJECT_DIR, 'warnings.txt')
-            write_mode = 'w' if os.path.exists(warning_path) else 'a'
-            with open(warning_path, write_mode) as f:
-                f.write('GPU was not available - switching to CPU')
-            solver.SetSimulationTarget('CPU')
-        else:
-            solver.SetSimulationTarget('GPU')
-            
-    elif processor == 'CPU':
-        solver.SetSimulationTarget('CPU')
-        solver.SetNumberOfProcessors(NPROCS)
-
-def settle_particles(autotimestep: bool=True, timestep=None):
-    """
-    Simulate the settling of particles in the domain.
-    This function runs the simulation for a specified duration to allow particles
-    to settle before the compression phase.
-
-    **Parameters:**
-    - `autotimestep` (bool): If True, uses the default timestep settings.
-    - `timestep` (float): If provided, sets a fixed timestep for the simulation.
-                          If not provided, a default timestep of 1e-6 seconds is used.
-                          If `autotimestep` is True, this parameter is ignored.
-    """
-
-    global study, project
-
-    if not _run_flag or study.HasResults():
-        return
-
-
-    if not autotimestep:
-        if not timestep:
-            solver.SetUseFixedTimestep(True)
-            solver.SetFixedTimestep(1e-6, 's')
-        else:
-            solver.SetUseFixedTimestep(True)
-            solver.SetFixedTimestep(timestep, 's')
-
-    solver = study.GetSolver()
-    solver.SetSimulationDuration(T_SETTLE, 's')
-
-    _select_processor(solver=solver, processor=PROCESSOR)
-
-    study.StartSimulation()
-    while study.IsSimulating():
-        study.RefreshResults()
-        print(f"Simulation Progress: {study.GetProgress():.2f} %")
-
-    # Find current wall position
-    old_wall_pos = top_wall.GetGridFunction('Coordinate : Nodal : X')\
-        .GetArray(time_step=-1).max()
-
-    # Calculate new wall position -> 1 micron above bed height
-    particles = study.GetParticles()
-
-    # Handle P_RADIUS being either a float or a dictionary
-    max_radius = P_RADIUS if isinstance(P_RADIUS, float) or isinstance(P_RADIUS, int) else max(P_RADIUS.keys())
-    new_wall_pos = particles.GetGridFunction(
-        'Coordinate : X').GetArray(time_step=-1).max()\
-        + max_radius + 1e-6
-
-    global wall_pos
-    wall_pos = (old_wall_pos, new_wall_pos)
-
-    project.SaveProjectForRestart('uniaxial_compression_restart.rocky',
-                                  timestep_or_index=-1)
-
-def compress_particles(autotimestep: Optional[bool]=True, 
-                       timestep: Optional[float]=None,
-                       t_lower: Optional[float]=0.5):
-    """
-    Simulate the compression of particles in the domain.
-    This function applies a compressive force to the particles and simulates
-    the compression process for a specified duration.
-    
-    **Parameters:**
-    - `autotimestep` (bool): If True, uses the default timestep settings.
-    - `timestep` (float): If provided, sets a fixed timestep for the simulation.
-                          If not provided, a default timestep of 1e-6 seconds is used.
-                          If `autotimestep` is True, this parameter is ignored.
-    - `t_lower` (float): The duration for which the compressing wall moves down.
-                         Default is 0.5 seconds.
-    """
-
-    global study, project, top_wall, wall_pos, T_LOWER
-
-    if not _run_flag:
-        return
-    T_LOWER = t_lower
-    old_wall_pos, new_wall_pos = wall_pos
-
-    frame_source = study.GetMotionFrameSource()
-
-    frame_source = study.GetMotionFrameSource()
-    compr_motion_frame = frame_source.NewFrame()
-    motions = compr_motion_frame.GetMotions()
-
-    # If the wall is already at the new position, skip the motion
-    if old_wall_pos != new_wall_pos:
-        lower_wall_motion = motions.New()
-        lower_wall_motion.SetType('Translation')
-        translation = lower_wall_motion.GetTypeObject()
-        translation.SetInput('fixed_velocity')
-        translation.SetVelocity(
-            [(new_wall_pos-old_wall_pos)/t_lower, 0, 0], 'm/s')
-        lower_wall_motion.SetStartTime(0)
-        lower_wall_motion.SetStopTime(t_lower)
-
-    # Handling the free body motion
-    freebody_motion = motions.New()
-    freebody_motion.SetType('Free Body Translation')
-    freebody = freebody_motion.GetTypeObject()
-    freebody.SetFreeMotionDirection('x')
-    freebody_motion.SetStartTime(t_lower)
-
-    # Set the compression wall motion
-    force_magnitude = COMPR_PRESSURE * PARTICLE_BOX_LEN**2
-    force_motion = motions.New()
-    force_motion.SetType('Additional Force')
-    add_force = force_motion.GetTypeObject()
-    add_force.SetForceValue([-force_magnitude, 0, 0], 'N')
-    force_motion.SetStartTime(t_lower)
-
-    compr_motion_frame.ApplyTo(top_wall)
-    solver = study.GetSolver()
-    solver.SetSimulationDuration(T_COMPRESSION, 's')
-
-    _select_processor(solver=solver, processor=PROCESSOR)
-
-    if not autotimestep:
-        if not timestep:
-            solver.SetUseFixedTimestep(True)
-            solver.SetFixedTimestep(1e-6, 's')
-        else:
-            solver.SetUseFixedTimestep(True)
-            solver.SetFixedTimestep(timestep, 's')
-
-    project.SaveProject()
-    study.StartSimulation()
-
-    project.SaveProject()
 
 def _calc_bulk_dens(particles, time_step, sample_frac=0.9) -> float:
     x_coords = particles.GetGridFunction(
@@ -697,7 +602,7 @@ def _calc_bulk_dens_v2(particles, time_step, sample_frac=0.8) -> tuple:
         "z_min": z_coords.mean() - sample_rng[2] / 2,
         "z_max": z_coords.mean() + sample_rng[2] / 2
     }
-    
+
     # Using @fjbarter's clever code to compute packing fraction
     packing_frac = packing3d.compute_packing_cartesian(
         x_data=x_coords, y_data=y_coords,
@@ -711,8 +616,8 @@ def _calc_bulk_dens_v2(particles, time_step, sample_frac=0.8) -> tuple:
     return bulk_dens, voidage
 
 
-def post_process(plot: Optional[bool] = True, 
-                 bulk_dens_method: Optional[str]='sample') -> None:
+def post_process(plot: Optional[bool] = True,
+                 bulk_dens_method: Optional[str] = 'sample') -> None:
     """
     Post-process the simulation results. Includes calculating bulk density,
     voidage, Hausner ratio, and compression index. Optionally plots the results.
@@ -720,21 +625,22 @@ def post_process(plot: Optional[bool] = True,
     **Parameters:**
     - `plot` (bool): If True, generates plots of bulk density and voidage over time.
     - `bulk_dens_method` (str): Method to calculate bulk density. Options are 'precise' or 'sample'.
-            'precise' uses an analytical method based on particle positions, considering cuttoffs. 
-            'corase' uses a sampling method based on a fraction of the domain.
+            'precise' uses an analytical method based on particle positions, considering cuttoffs.
+            'coarse' uses a sampling method based on a fraction of the domain. Default sample frac
+            is 0.9.
     """
     global study, project
 
     time_set = study.GetTimeSet()
     timeset_arr = time_set.GetValues()
-    settled_timestep = np.where(timeset_arr == T_LOWER)[0][0].item()
+    settled_timestep = np.where(timeset_arr == T_SETTLE)[0][0].item()
     particles = study.GetParticles()
 
     if bulk_dens_method == 'precise':
         uncompr_dens, voidage = _calc_bulk_dens_v2(particles, settled_timestep)
         compr_dens, voidage = _calc_bulk_dens_v2(particles, -1)
     elif bulk_dens_method == 'sample':
-        bulk_dens = _calc_bulk_dens(particles, settled_timestep, 0.9)
+        uncompr_dens = _calc_bulk_dens(particles, settled_timestep, 0.9)
         compr_dens = _calc_bulk_dens(particles, -1, 0.9)
 
     hausner_ratio = compr_dens / uncompr_dens
@@ -753,7 +659,8 @@ def post_process(plot: Optional[bool] = True,
             if bulk_dens_method == 'precise':
                 voidage.append(voidage_ts)
         bulk_dens_t = np.array(bulk_dens)
-        voidage_t = np.array(voidage) if bulk_dens_method == 'precise' else None
+        voidage_t = np.array(
+            voidage) if bulk_dens_method == 'precise' else None
 
         if bulk_dens_method == 'precise':
             # Create a plot with two y-axes
@@ -806,51 +713,40 @@ def post_process(plot: Optional[bool] = True,
                     'bulk_density_voidage.png'),
                 dpi=300)
 
+    case_num = int(os.path.basename(PROJECT_DIR).split('_')[-1])
+    n_particles = int(particles.GetNumberOfParticles(0))
+    particles_lost = int(n_particles - particles.GetNumberOfParticles(-1))
+
     global particle
     shape_name = particle.GetShape()
     vert_ar = particle.GetVerticalAspectRatio()
     horiz_ar = particle.GetHorizontalAspectRatio()
     n_corners = particle.GetNumberOfCorners()
     sq_degree = particle.GetSuperquadricDegree()
-    smoothness = particle.GetSmoothness() 
+    smoothness = particle.GetSmoothness()
 
     col_vals = [
-        P_RADIUS, P_DENSITY, P_YOUNGMOD, P_POISSON,
+        case_num, P_RADIUS, P_DENSITY, P_YOUNGMOD, P_POISSON,
         PP_DYNAMIC_FRICTION, PP_STATIC_FRICTION, PP_COR,
         PW_DYNAMIC_FRICTION, PW_STATIC_FRICTION, PW_COR,
         ROLLING_FRICTION, COMPR_PRESSURE,
         NORMAL_FORCE_MODEL, TANGENTIAL_FORCE_MODEL, ADHESION_MODEL,
-        ROLLING_MODEL, PARTICLE_BOX_LEN,  vert_ar, horiz_ar, n_corners,
+        ROLLING_MODEL, PARTICLE_BOX_LEN, n_particles,
+        shape_name, vert_ar, horiz_ar, n_corners,
         sq_degree, smoothness, uncompr_dens, compr_dens,
-        hausner_ratio, compr_idx
+        hausner_ratio, compr_idx, particles_lost
     ]
 
     col_names = [
-        'p_radius', 'p_density', 'p_youngmod', 'p_poisson',
+        'case_n', 'p_radius', 'p_density', 'p_youngmod', 'p_poisson',
         'pp_dynamic_friction', 'pp_static_friction', 'pp_cor',
         'pw_dynamic_friction', 'pw_static_friction', 'pw_cor',
         'rolling_friction', 'compression_pressure',
         'normal_force_model', 'tangential_force_model', 'adhesion_model',
-        'rolling_model', 'box_len', 'vert_ar', 'horiz_ar', 'n_corners',
-        'sq_degree', 'smoothness', 'bulk_density', 'compressed_density',
-        'hausner_ratio', 'compression_index'
+        'rolling_model', 'box_len', 'n_particles', 'shape_name', 'vert_ar',
+        'horiz_ar', 'n_corners', 'sq_degree', 'smoothness', 'bulk_density',
+        'compressed_density', 'hausner_ratio', 'compression_index', 'n_lost'
     ]
-
-    global particle_warning, particle_rng
-    particle_warning = False
-    particle_rng = []
-    
-    if particles.GetNumberOfParticles(time_set[0]) != particles.GetNumberOfParticles(
-        time_set[-1]):
-            warnings.warn(
-                "Particles are being lost during the simulation."
-                "Results set to NaN."
-            )
-            particle_warning = True
-            particle_rng = [
-                particles.GetNumberOfParticles(time_set[0]), 
-                particles.GetNumberOfParticles(time_set[-1])
-            ]
 
     assert len(col_vals) == len(col_names), \
         "Column values and names must have the same length."
@@ -870,6 +766,7 @@ def post_process(plot: Optional[bool] = True,
 
         create_table_query = '''CREATE TABLE IF NOT EXISTS results (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            case_n INTEGER,
             p_radius REAL,
             p_density REAL,
             p_youngmod REAL,
@@ -887,6 +784,8 @@ def post_process(plot: Optional[bool] = True,
             adhesion_model TEXT,
             rolling_model TEXT,
             box_len REAL,
+            n_particles INTEGER,
+            shape_name TEXT,
             vert_ar REAL,
             horiz_ar REAL,
             n_corners INTEGER,
@@ -896,6 +795,7 @@ def post_process(plot: Optional[bool] = True,
             compressed_density REAL,
             hausner_ratio REAL,
             compression_index REAL
+            n_lost INTEGER
         )'''
         insert_query = f'''INSERT INTO results (
             p_radius, p_density, p_youngmod, p_poisson,
@@ -903,10 +803,10 @@ def post_process(plot: Optional[bool] = True,
             pw_dynamic_friction, pw_static_friction, pw_cor,
             rolling_friction, compression_pressure,
             normal_force_model, tangential_force_model, adhesion_model,
-            rolling_model, box_len, vert_ar, horiz_ar, n_corners,
+            rolling_model, box_len, shape_name, vert_ar, horiz_ar, n_corners,
             sq_degree, smoothness, bulk_density, compressed_density,
             hausner_ratio, compression_index
-        ) VALUES ({','.join(['?']*len(col_vals))})
+        ) VALUES ({','.join(['?'] * len(col_vals))})
         '''
 
         try:
@@ -940,8 +840,8 @@ gen_particle(shape_dict)
 sim_physics()
 insertion_settings()
 set_domain_settings()
-settle_particles()
-compress_particles()
+move_top_wall()
+simulate()
 post_process()
 
 if particle_warning:
