@@ -121,6 +121,7 @@ def setup(filename='uniaxial_compression.rocky') -> None:
 
     global project, study
 
+    # Create Rocky file
     rocky_path = os.path.join(PROJECT_DIR, filename)
     if os.path.exists(rocky_path):
         project = app.OpenProject(rocky_path)
@@ -199,6 +200,7 @@ def load_material_properties():
     global study, top_wall, bottom_wall, wall_mat, particle_mat
     material_collection = study.GetMaterialCollection()
 
+    # Create materials for particles and walls
     particle_mat = material_collection.AddSolidMaterial()
     particle_mat.SetName("Particle Material")
     particle_mat.SetDensity(P_DENSITY, 'kg/m3')
@@ -309,6 +311,8 @@ def gen_particle(shape_dict: dict[str, float | str]) -> None:
     study = app.GetStudy()
     particle = study.CreateParticle()
     shape = shape_dict.get("name")
+
+    # Use shape objects from particles_shapes module
     match shape:
         case "sphere":
             shape_obj = particle_shapes.Sphere(radius=P_RADIUS)
@@ -359,12 +363,14 @@ def sim_physics() -> None:
     if not _run_flag and not _resume_flag:
         return
 
+    # Contact models
     physics = study.GetPhysics()
     physics.SetNormalForceModel(NORMAL_FORCE_MODEL)
     physics.SetTangentialForceModel(TANGENTIAL_FORCE_MODEL)
     physics.SetAdhesionModel(ADHESION_MODEL)
 
-    physics.SetGravityXDirection(-9.81)
+    # Gravity
+    physics.SetGravityXDirection(-9.81) # X-positive is upwards (don't ask)
     physics.SetGravityYDirection(0)
     physics.SetGravityZDirection(0)
 
@@ -379,7 +385,7 @@ def insertion_settings() -> None:
     fill_box_vol = PARTICLE_BOX_LEN**3  # m^3
     particle_vol = (4 / 3) * np.pi * P_RADIUS**3  # m^3
 
-    # 0.64 is an avg packing fraction of sphereical particles
+    # 0.64 is an avg packing fraction of spherical particles
     if INSERT_TYPE == 'ins':
         n_particles = np.rint(
             fill_box_vol * 0.64 / particle_vol
@@ -408,7 +414,7 @@ def insertion_settings() -> None:
             particle=particle,
             name='Volumetric Inlet',
             mass=mass_particles,
-            seed_coordinates=[0, 0, 0],
+            seed_coordinates=[0, 0, 0],  # Center of domain is origin
             use_geometries_to_compute=False,
             box_center=[0, 0, 0],
             box_dimensions=[PARTICLE_BOX_LEN, PARTICLE_BOX_LEN, PARTICLE_BOX_LEN]
@@ -472,7 +478,16 @@ def set_domain_settings() -> None:
     )
 
 
-def _select_processor(solver, processor: str):
+def _select_processor(solver, processor: str) -> None:
+    """
+    Handle the selection of the processor for the simulation.
+    Based on the PROCESSOR variable, it sets the simulation target.
+    Writes a warning to a file if GPU is not available and switches to CPU.
+
+    **Parameters:**
+    - `solver`: The solver object from the Rocky study.
+    - `processor`: The processor to use for the simulation ('GPU' or 'CPU').
+    """
     if processor == 'GPU':
         if processor not in solver.GetValidSimulationTargetValues():
             warning_path = os.path.join(PROJECT_DIR, 'warnings.txt')
@@ -489,6 +504,14 @@ def _select_processor(solver, processor: str):
 
 
 def simulate(autotimestep: bool = True, timestep=None) -> None:
+    """
+    Starts simulation of the uniaxial compression test.
+
+    **Parameters:**
+    - `autotimestep` (bool): If True, Rocky will automatically determine the timestep.
+    - `timestep` (float): If autotimestep is False, this sets the fixed timestep in seconds.
+
+    """
 
     if not _run_flag:
         return
@@ -523,6 +546,20 @@ def simulate(autotimestep: bool = True, timestep=None) -> None:
 
 
 def _calc_bulk_dens(particles, time_step, sample_frac=0.9) -> float:
+    """
+    Calculates bulk density of particles at a given time step.
+    This takes the range of particles positions, takes a fraction of
+    the domain and calculates the bulk density based on the mass in
+    volume using rho = m / V.
+
+    **Parameters:**
+    - `particles`: The RAParticles object from the Rocky study.
+    - `time_step`: The time step at which to calculate the bulk density.
+    - `sample_frac`: Fraction of the domain length to sample for bulk density calculation.
+
+    **Returns:**
+    - `bulk_density`: The bulk density of the particles at the given time step.
+    """
     x_coords = particles.GetGridFunction(
         'Coordinate : X').GetArray(time_step=time_step)
     y_coords = particles.GetGridFunction(
@@ -621,6 +658,7 @@ def post_process(plot: Optional[bool] = True,
     """
     Post-process the simulation results. Includes calculating bulk density,
     voidage, Hausner ratio, and compression index. Optionally plots the results.
+    Results are saved into a SQLite database
 
     **Parameters:**
     - `plot` (bool): If True, generates plots of bulk density and voidage over time.
@@ -843,11 +881,3 @@ set_domain_settings()
 move_top_wall()
 simulate()
 post_process()
-
-if particle_warning:
-    raise RuntimeWarning(
-        f"Particles were lost during the simulation. "
-        f"Initial particle count: {particle_rng[0]}, "
-        f"Final particle count: {particle_rng[1]}. "
-        f"Check the simulation settings and results."
-    )
