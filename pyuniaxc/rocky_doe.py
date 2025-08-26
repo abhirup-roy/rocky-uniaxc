@@ -95,28 +95,21 @@ def iter_ofat(json_path: str, ofat_values: dict[str, list|str], n_points:int):
         raise ValueError(f"Invalid OFAT parameters. Allowed parameters are: {list(ofat_base_valid.keys())}")
 
     range_valid = {
-        'fric_dyn_pp': (0, 1),
-        'fric_stat_pp': (0, 1),
-        'fric_rolling_pp': (0, 1),
+        'fric_dyn_pp': (0, None),
+        'fric_stat_pp': (0, None),
+        'fric_rolling_pp': (0, None),
         'cor_pp': (0, 1),
-        'fric_dyn_pw': (0, 1),
-        'fric_stat_pw': (0, 1),
+        'fric_dyn_pw': (0, None),
+        'fric_stat_pw': (0, None),
         'cor_pw': (0, 1),
         'box_len': (0, None),
-        'p_compress': (0, 1),
-        'normal': (0, 1),
-        'tangential': (0, 1),
-        'rolling': (0, 1),
-        'adhesion': (0, 1),
         'vert_ar': (0, None),
         'horiz_ar': (0, None),
-        'n_corners': (0, None),
+        'n_corners': (10, None),
         'sq_degree': (2, None)
     }
 
     for k in ofat_values['parameters']:
-        if k not in range_valid:
-            raise ValueError(f"Parameter '{k}' is not recognized for range validation.")
         lb, ub = range_valid[k]
         ub = ub if ub is not None else float('inf')
         if k not in ofat_base_valid:
@@ -309,7 +302,7 @@ def launch_ofat(sweep_name: str, autolaunch: bool, json_path:str,
             script_file.write(rendered_content)
 
         # Log case information
-        print(f"Case {i}/{total_cases} prepared")
+        print(f"Case {i+1}/{total_cases} prepared")
 
         # Create SLURM script
         slurm_sbatch(case_dir, loc=loc, autolaunch=False, custom_msg=custom_sh, ncpus=ncpus)  # Don't launch yet
