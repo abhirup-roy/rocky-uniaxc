@@ -728,14 +728,14 @@ def post_process(plot: Optional[bool] = True) -> None:
             n_lost INTEGER
         )'''
         insert_query = f'''INSERT INTO results (
-            p_radius, p_density, p_youngmod, p_poisson,
+            case_n, p_radius, p_density, p_youngmod, p_poisson,
             pp_dynamic_friction, pp_static_friction, pp_cor,
             pw_dynamic_friction, pw_static_friction, pw_cor,
             rolling_friction, compression_pressure,
             normal_force_model, tangential_force_model, adhesion_model,
-            rolling_model, box_len, shape_name, vert_ar, horiz_ar, n_corners,
+            rolling_model, box_len, n_particles, shape_name, vert_ar, horiz_ar, n_corners,
             sq_degree, smoothness, bulk_density, compressed_density,
-            hausner_ratio, compression_index
+            hausner_ratio, compression_index, n_lost
         ) VALUES ({','.join(['?'] * len(col_vals))})
         '''
 

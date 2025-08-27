@@ -51,13 +51,12 @@ Rocky --script "script_uniax.py" --headless >> rocky.log
     # For AZ SCP use
     elif loc == "az-gpu":
         template="""#!/bin/sh
-#SBATCH -L uniaxc
+#SBATCH --job-name=uniaxc
 #SBATCH --ntasks=1
 #SBATCH --time=5-0
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-gpu=1
 #SBATCH -p gpu
-#SBATCH -L ansys:1
 
 set -e
 
