@@ -11,3 +11,6 @@ dependencies = [
     "numpy>=2.2.6",
     "pandas>=2.3.2",
 ]
+
+[tool.ruff]
+per-file-ignores = { "templates/*" = ["F821"] }

@@ -324,4 +324,4 @@ def launch_ofat(sweep_name: str, autolaunch: bool, json_path:str,
 
 
     print(f"All {total_cases} cases prepared and launched.")
-    print(f"Exiting launcher script now")
+    print("Exiting launcher script now")

@@ -732,7 +732,7 @@ def post_process(plot: Optional[bool] = True) -> None:
             bulk_density REAL,
             compressed_density REAL,
             hausner_ratio REAL,
-            compression_index REAL
+            compression_index REAL,
             n_lost INTEGER
         )'''
         insert_query = f'''INSERT INTO results (
