@@ -27,7 +27,7 @@
         }
     },
     "experim_settings": {
-        "box_len": 0.005,
+        "box_len": 0.0025,
         "p_compress": 15e3
     },
     "contact_model": {
