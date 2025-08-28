@@ -96,8 +96,6 @@ if NEIGHBOUR_SEARCH is not None:
 
 PROCESSOR: str = {{XPU}}
 assert PROCESSOR in ['CPU', 'GPU', 'MULTI_GPU']
-RUNTIME: float = 5.  # s
-assert RUNTIME >= sum([T_FILL, T_SETTLE, T_COMPRESSION])
 
 # Paths
 PROJECT_DIR = os.getcwd()
@@ -457,24 +455,33 @@ def set_domain_settings() -> None:
 
     global study
 
-    # Domain settings for the simulation
     domain_settings = study.GetDomainSettings()
+
+    # Disable as it is unreliable
+    domain_settings.DisableUseBoundaryLimits()
+    domain_settings.DisablePeriodicAtGeometryLimits()
+
+    # Adding 1.5 safety factor to avoid issues with particles
     domain_settings.SetDomainType('CARTESIAN')
-    domain_settings.SetCoordinateLimitsMinValues(
-        [-PARTICLE_BOX_LEN / 2 - 1e6, -PARTICLE_BOX_LEN / 2, -PARTICLE_BOX_LEN / 2]
-    )
-    domain_settings.SetCoordinateLimitsMaxValues(
-        [PARTICLE_BOX_LEN / 2 + 1e6, PARTICLE_BOX_LEN / 2, PARTICLE_BOX_LEN / 2]
-    )
+    domain_settings.SetCoordinateLimitsMinValues([
+        (-PARTICLE_BOX_LEN / 2) * 1.5,
+        (-PARTICLE_BOX_LEN / 2) * 1.5,
+        (-PARTICLE_BOX_LEN / 2) * 1.5
+    ])
+    domain_settings.SetCoordinateLimitsMaxValues([
+        (PARTICLE_BOX_LEN / 2) * 1.5,
+        (PARTICLE_BOX_LEN / 2) * 1.5,
+        (PARTICLE_BOX_LEN / 2) * 1.5
+    ])
 
     # Set the periodic limits for the domain
+    # X direction does not matter as walls are there
     domain_settings.SetCartesianPeriodicDirections('YZ')
     domain_settings.SetPeriodicLimitsMinCoordinates(
-        [-PARTICLE_BOX_LEN / 2 - 1e6, -PARTICLE_BOX_LEN / 2, -PARTICLE_BOX_LEN / 2]
+        [-1e6, -PARTICLE_BOX_LEN / 2, -PARTICLE_BOX_LEN / 2]
     )
-
     domain_settings.SetPeriodicLimitsMaxCoordinates(
-        [PARTICLE_BOX_LEN / 2 + 1e6, PARTICLE_BOX_LEN / 2, PARTICLE_BOX_LEN / 2]
+        [1e6, PARTICLE_BOX_LEN / 2, PARTICLE_BOX_LEN / 2]
     )
 
 
@@ -530,7 +537,8 @@ def simulate(autotimestep: bool = True, timestep=None) -> None:
             solver.SetUseFixedTimestep(True)
             solver.SetFixedTimestep(timestep, 's')
 
-    solver.SetSimulationDuration(RUNTIME, 's')
+    runtime = T_SETTLE + T_COMPRESSION
+    solver.SetSimulationDuration(runtime, 's')
 
     if INSERT_TYPE == 'ins':
         solver.SetReleaseParticlesWithoutOverlapCheck(True)
