@@ -14,11 +14,12 @@ import matplotlib.pyplot as plt
 
 # Import particle shapes using importlib
 shapes_spec = importlib.util.spec_from_file_location(
-    'particles_shapes', os.path.abspath('../../../particles_shapes.py'))
+    "particles_shapes", os.path.abspath("../../../particles_shapes.py")
+)
 if not shapes_spec:
     raise ImportError("Could not find the particles_shapes.py file.")
 particle_shapes = importlib.util.module_from_spec(shapes_spec)
-sys.modules['particles_shapes'] = particle_shapes  # Add to sys.modules
+sys.modules["particles_shapes"] = particle_shapes  # Add to sys.modules
 shapes_spec.loader.exec_module(particle_shapes)
 
 
@@ -28,8 +29,8 @@ P_DENSITY: float = {{DENSITY_P}}  # kg/m^3
 P_YOUNGMOD: float = {{YOUNGMOD_P}}  # Pa
 P_POISSON: float = {{POISSON_P}}  # Poisson ratio
 
-ROLLING_MODEL = '{{ROLLING_MODEL}}'  # 'type_1', 'type_3', 'none', 'custom'
-assert ROLLING_MODEL in ['type_1', 'type_3', 'none', 'custom']
+ROLLING_MODEL = "{{ROLLING_MODEL}}"  # 'type_1', 'type_3', 'none', 'custom'
+assert ROLLING_MODEL in ["type_1", "type_3", "none", "custom"]
 
 # P-P / P-W properties
 PP_DYNAMIC_FRICTION: float = {{DYNAMIC_FRICTION_PP}}
@@ -41,12 +42,19 @@ PW_DYNAMIC_FRICTION: float = {{DYNAMIC_FRICTION_PW}}
 PW_STATIC_FRICTION: float = {{STATIC_FRICTION_PW}}
 PW_COR: float = {{COR_PW}}
 
-for i, _p in enumerate([
-        PP_DYNAMIC_FRICTION, PP_STATIC_FRICTION, PP_COR,
-        PW_DYNAMIC_FRICTION, PW_STATIC_FRICTION, PW_COR,
-        ROLLING_FRICTION, P_POISSON]):
-
-    if (i == 6) and (ROLLING_MODEL == 'none') and (not _p):
+for i, _p in enumerate(
+    [
+        PP_DYNAMIC_FRICTION,
+        PP_STATIC_FRICTION,
+        PP_COR,
+        PW_DYNAMIC_FRICTION,
+        PW_STATIC_FRICTION,
+        PW_COR,
+        ROLLING_FRICTION,
+        P_POISSON,
+    ]
+):
+    if (i == 6) and (ROLLING_MODEL == "none") and (not _p):
         continue
     if _p < 0 or _p > 1:
         raise ValueError(
@@ -55,22 +63,24 @@ for i, _p in enumerate([
         )
 
 # Contact models
-NORMAL_FORCE_MODEL = '{{NORMAL_MODEL}}'
+NORMAL_FORCE_MODEL = "{{NORMAL_MODEL}}"
 assert NORMAL_FORCE_MODEL in [
-    'linear_hysteresis',
-    'linear_elastic_viscous',
-    'damped_hertzian',
-    'custom']
+    "linear_hysteresis",
+    "linear_elastic_viscous",
+    "damped_hertzian",
+    "custom",
+]
 
-TANGENTIAL_FORCE_MODEL = '{{TANG_MODEL}}'
+TANGENTIAL_FORCE_MODEL = "{{TANG_MODEL}}"
 assert TANGENTIAL_FORCE_MODEL in [
-    'elastic_coulomb',
-    'coulomb_limit',
-    'mindlin_deresiewicz',
-    'custom']
+    "elastic_coulomb",
+    "coulomb_limit",
+    "mindlin_deresiewicz",
+    "custom",
+]
 
-ADHESION_MODEL = '{{ADH_MODEL}}'
-assert ADHESION_MODEL in ['none', 'constant', 'linear', 'JKR', 'custom']
+ADHESION_MODEL = "{{ADH_MODEL}}"
+assert ADHESION_MODEL in ["none", "constant", "linear", "JKR", "custom"]
 
 PARTICLE_BOX_LEN: float = {{L_BOX}}  # m
 T_FILL: float = 0  # s
@@ -80,11 +90,11 @@ COMPR_PRESSURE: float = {{P_COMPRESS}}  # Pa
 T_COMPRESSION: float = 1  # s
 
 # Insert type
-INSERT_TYPE: str = 'vol'  # 'vol', 'ins'
-assert INSERT_TYPE in ['vol', 'ins']
+INSERT_TYPE: str = "vol"  # 'vol', 'ins'
+assert INSERT_TYPE in ["vol", "ins"]
 
 # Solver settings
-NPROCS = os.environ.get('SLURM_CPUS_ON_NODE', 20)
+NPROCS = os.environ.get("SLURM_CPUS_ON_NODE", 20)
 try:
     NPROCS = int(NPROCS)
 except ValueError:
@@ -92,14 +102,14 @@ except ValueError:
 
 NEIGHBOUR_SEARCH = None
 if NEIGHBOUR_SEARCH is not None:
-    assert NEIGHBOUR_SEARCH in ['BVH', 'RegularGrid', 'SparseGrid']
+    assert NEIGHBOUR_SEARCH in ["BVH", "RegularGrid", "SparseGrid"]
 
 PROCESSOR: str = {{XPU}}
-assert PROCESSOR in ['CPU', 'GPU', 'MULTI_GPU']
+assert PROCESSOR in ["CPU", "GPU", "MULTI_GPU"]
 
 # Paths
 PROJECT_DIR = os.getcwd()
-MESHDIR = os.path.abspath(f'../meshes_{PARTICLE_BOX_LEN}')
+MESHDIR = os.path.abspath(f"../meshes_{PARTICLE_BOX_LEN}")
 
 # Paths to the Rocky executable - for PyRocky implementation
 # BB_ROCKY_PATH = '/rds/bear-apps/2023a/EL8-ice/software/ANSYS_Rocky/2024R2.0/bin/Rocky'
@@ -110,7 +120,7 @@ _run_flag = True
 _resume_flag = False
 
 
-def setup(filename='uniaxial_compression.rocky') -> None:
+def setup(filename="uniaxial_compression.rocky") -> None:
     """
     Setup the Rocky project and study for uniaxial compression simulation.
     If the project file already exists, it will load the existing project.
@@ -132,7 +142,7 @@ def setup(filename='uniaxial_compression.rocky') -> None:
         project = app.CreateProject()
         project.SaveProject(rocky_path)
         study = project.GetStudy()
-        study.SetName('Uniaxial Compression')
+        study.SetName("Uniaxial Compression")
         _run_flag = True
 
 
@@ -146,46 +156,33 @@ def load_meshes() -> None:
 
     global top_wall, bottom_wall, study
 
-    compr_wall1_stl_path = os.path.join(
-        MESHDIR, 'compressive_wall1.stl'
-    )
-    compr_wall2_stl_path = os.path.join(
-        MESHDIR, 'compressive_wall2.stl'
-    )
+    compr_wall1_stl_path = os.path.join(MESHDIR, "compressive_wall1.stl")
+    compr_wall2_stl_path = os.path.join(MESHDIR, "compressive_wall2.stl")
 
     # Load Top Wall
     top_wall = study.ImportWall(
-        compr_wall1_stl_path, import_scale=1.0,
-        convert_yz=True
+        compr_wall1_stl_path, import_scale=1.0, convert_yz=True
     )[0]
-    top_wall.SetName('Top Wall')
+    top_wall.SetName("Top Wall")
     top_wall.SetBoundaryMass(1e-6)
-    top_wall.SetTranslation(
-        [-PARTICLE_BOX_LEN / 2, 0, 0]
-    )
+    top_wall.SetTranslation([-PARTICLE_BOX_LEN / 2, 0, 0])
 
     # Load bottom wall with a slight offset
     # to avoid overlap wth periodic boundary
     bottom_wall = study.ImportWall(
-        compr_wall2_stl_path, import_scale=1.0,
-        convert_yz=True
+        compr_wall2_stl_path, import_scale=1.0, convert_yz=True
     )[0]
-    bottom_wall.SetName('Bottom Wall')
-    bottom_wall.SetTranslation(
-        [PARTICLE_BOX_LEN / 2 + 1e-6, 0, 0]
-    )
+    bottom_wall.SetName("Bottom Wall")
+    bottom_wall.SetTranslation([PARTICLE_BOX_LEN / 2 + 1e-6, 0, 0])
 
-    if INSERT_TYPE == 'ins':
-        insert_stl_path = os.path.join(
-            MESHDIR, 'insert.stl'
-        )
+    if INSERT_TYPE == "ins":
+        insert_stl_path = os.path.join(MESHDIR, "insert.stl")
 
         global insert_inlet
         insert_inlet = study.ImportSurface(
-            insert_stl_path,
-            import_scale=0.99,
-            convert_yz=True)[0]
-        insert_inlet.SetName('Insert Inlet')
+            insert_stl_path, import_scale=0.99, convert_yz=True
+        )[0]
+        insert_inlet.SetName("Insert Inlet")
 
 
 def load_material_properties():
@@ -201,15 +198,15 @@ def load_material_properties():
     # Create materials for particles and walls
     particle_mat = material_collection.AddSolidMaterial()
     particle_mat.SetName("Particle Material")
-    particle_mat.SetDensity(P_DENSITY, 'kg/m3')
-    particle_mat.SetYoungsModulus(P_YOUNGMOD, 'Pa')
+    particle_mat.SetDensity(P_DENSITY, "kg/m3")
+    particle_mat.SetYoungsModulus(P_YOUNGMOD, "Pa")
     particle_mat.SetPoissonRatio(P_POISSON)
     particle_mat.SetUseBulkDensity(False)
 
     wall_mat = material_collection.AddSolidMaterial()
     wall_mat.SetName("Wall Material")
-    wall_mat.SetDensity(2700, 'kg/m3')
-    wall_mat.SetYoungsModulus(5e6, 'Pa')
+    wall_mat.SetDensity(2700, "kg/m3")
+    wall_mat.SetYoungsModulus(5e6, "Pa")
     wall_mat.SetPoissonRatio(0.3)
     wall_mat.SetUseBulkDensity(False)
 
@@ -219,7 +216,6 @@ def load_material_properties():
 
 
 def load_interactions() -> None:
-
     if not _run_flag and not _resume_flag:
         return
 
@@ -227,12 +223,10 @@ def load_interactions() -> None:
 
     interaction_collection = study.GetMaterialsInteractionCollection()
     pp_interaction = interaction_collection.GetMaterialsInteraction(
-        particle_mat,
-        particle_mat
+        particle_mat, particle_mat
     )
     pw_interaction = interaction_collection.GetMaterialsInteraction(
-        particle_mat,
-        wall_mat
+        particle_mat, wall_mat
     )
 
     # Set the contact laws for the particle-particle interaction
@@ -261,7 +255,7 @@ def set_psd() -> None:
         size_distr_lst.Clear()
 
         psd = size_distr_lst.New()
-        psd.SetSize(P_RADIUS, 'm')
+        psd.SetSize(P_RADIUS, "m")
         psd.SetCumulativePercentage(100)
 
     # If it is a dictionary, create a particle size distribution
@@ -290,14 +284,14 @@ def set_psd() -> None:
             # and set the size and cumulative percentage
             # Use exec to create a variable with the name of the PSD
             # This is not recommended, but it works for this case ;)
-            exec(f'psd{i} = size_distr_lst.New()')
+            exec(f"psd{i} = size_distr_lst.New()")
             exec(f'psd{i}.SetSize(size, "m")')
-            exec(f'psd{i}.SetCumulativePercentage(init_pct)')
+            exec(f"psd{i}.SetCumulativePercentage(init_pct)")
             init_pct -= proportion
 
     # Set particle material
     particle.SetMaterial(particle_mat)
-    if ROLLING_FRICTION != 'none':
+    if ROLLING_FRICTION != "none":
         particle.SetRollingResistance(ROLLING_FRICTION)
 
 
@@ -316,8 +310,7 @@ def gen_particle(shape_dict: dict[str, float | str]) -> None:
             shape_obj = particle_shapes.Sphere(radius=P_RADIUS)
         case "sphero_cylinder":
             vert_ar = shape_dict.get("vert_ar", 1.0)
-            shape_obj = particle_shapes.SpheroCylinder(
-                radius=P_RADIUS, vert_ar=vert_ar)
+            shape_obj = particle_shapes.SpheroCylinder(radius=P_RADIUS, vert_ar=vert_ar)
         case "polyhedron":
             vert_ar = shape_dict.get("vert_ar", 1.0)
             horiz_ar = shape_dict.get("horiz_ar", 1.0)
@@ -325,20 +318,19 @@ def gen_particle(shape_dict: dict[str, float | str]) -> None:
             sq_degree = shape_dict.get("sq_degree", 1.0)
 
             shape_obj = particle_shapes.Polyhedron(
-                radius=P_RADIUS, vert_ar=vert_ar,
-                horiz_ar=horiz_ar, n_corners=n_corners,
-                superquadric_degree=sq_degree
+                radius=P_RADIUS,
+                vert_ar=vert_ar,
+                horiz_ar=horiz_ar,
+                n_corners=n_corners,
+                superquadric_degree=sq_degree,
             )
         case "custom_polyhedron":
             stl_path = str(shape_dict.get("particle_path", ""))
             if not stl_path or not os.path.exists(stl_path):
-                raise ValueError(
-                    "Custom polyhedron requires a valid STL file path."
-                )
+                raise ValueError("Custom polyhedron requires a valid STL file path.")
 
             shape_obj = particle_shapes.CustomPolyhedron(
-                stl_path=stl_path,
-                radius=P_RADIUS
+                stl_path=stl_path, radius=P_RADIUS
             )
         case _:
             raise ValueError(
@@ -348,9 +340,8 @@ def gen_particle(shape_dict: dict[str, float | str]) -> None:
 
     # Instantiate the shape for the particle
     shape_obj.particle2rocky(
-        particle=particle,
-        material=particle_mat,
-        rolling_friction=ROLLING_FRICTION)
+        particle=particle, material=particle_mat, rolling_friction=ROLLING_FRICTION
+    )
 
 
 def sim_physics() -> None:
@@ -368,7 +359,7 @@ def sim_physics() -> None:
     physics.SetAdhesionModel(ADHESION_MODEL)
 
     # Gravity
-    physics.SetGravityXDirection(-9.81) # X-positive is upwards (don't ask)
+    physics.SetGravityXDirection(-9.81)  # X-positive is upwards (don't ask)
     physics.SetGravityYDirection(0)
     physics.SetGravityZDirection(0)
 
@@ -384,20 +375,16 @@ def insertion_settings() -> None:
     particle_vol = (4 / 3) * np.pi * P_RADIUS**3  # m^3
 
     # 0.64 is an avg packing fraction of spherical particles
-    if INSERT_TYPE == 'ins':
-        n_particles = np.rint(
-            fill_box_vol * 0.64 / particle_vol
-        ).astype(int).item()
+    if INSERT_TYPE == "ins":
+        n_particles = np.rint(fill_box_vol * 0.64 / particle_vol).astype(int).item()
 
         mass_particles = particle_vol * P_DENSITY * n_particles
         flowr = mass_particles / T_FILL  # kg/s
 
-        particle_inlet = study.CreateParticleInlet(
-            insert_inlet, particle
-        )
+        particle_inlet = study.CreateParticleInlet(insert_inlet, particle)
 
         input_property_lst = particle_inlet.GetInputPropertiesList()
-        input_property_lst[0].SetMassFlowRate(flowr, 'kg/s')
+        input_property_lst[0].SetMassFlowRate(flowr, "kg/s")
 
         particle_inlet.SetStartTime(0)
         particle_inlet.SetStopTime(T_FILL)
@@ -410,17 +397,16 @@ def insertion_settings() -> None:
 
         study.CreateVolumetricInlet(
             particle=particle,
-            name='Volumetric Inlet',
+            name="Volumetric Inlet",
             mass=mass_particles,
             seed_coordinates=[0, 0, 0],  # Center of domain is origin
             use_geometries_to_compute=False,
             box_center=[0, 0, 0],
-            box_dimensions=[PARTICLE_BOX_LEN, PARTICLE_BOX_LEN, PARTICLE_BOX_LEN]
+            box_dimensions=[PARTICLE_BOX_LEN, PARTICLE_BOX_LEN, PARTICLE_BOX_LEN],
         )
 
 
 def move_top_wall():
-
     frame_source = study.GetMotionFrameSource()
     top_wall_frame = frame_source.NewFrame()
 
@@ -428,20 +414,18 @@ def move_top_wall():
 
     # Drop weightless wall
     drop_wall_motion = motions.New()
-    drop_wall_motion.SetType('Free Body Translation')
+    drop_wall_motion.SetType("Free Body Translation")
     free_body = drop_wall_motion.GetTypeObject()
-    free_body.SetFreeMotionDirection('x')
+    free_body.SetFreeMotionDirection("x")
     drop_wall_motion.SetStartTime(0)
 
     # Start compression
     # Account for wall mass
     pressure = (1e-6 * 9.81 - COMPR_PRESSURE) * PARTICLE_BOX_LEN**2  # N
     compr_motion = motions.New()
-    compr_motion.SetType('Additional Force')
+    compr_motion.SetType("Additional Force")
     add_force = compr_motion.GetTypeObject()
-    add_force.SetForceValue(
-        [pressure, 0, 0], 'N'
-    )
+    add_force.SetForceValue([pressure, 0, 0], "N")
     compr_motion.SetStartTime(T_SETTLE)
     compr_motion.SetStopTime(T_SETTLE + T_COMPRESSION)
 
@@ -449,7 +433,6 @@ def move_top_wall():
 
 
 def set_domain_settings() -> None:
-
     if not _run_flag and not _resume_flag:
         return
 
@@ -462,21 +445,25 @@ def set_domain_settings() -> None:
     domain_settings.DisablePeriodicAtGeometryLimits()
 
     # Adding 1.5 safety factor to avoid issues with particles
-    domain_settings.SetDomainType('CARTESIAN')
-    domain_settings.SetCoordinateLimitsMinValues([
-        (-PARTICLE_BOX_LEN / 2) * 1.5,
-        (-PARTICLE_BOX_LEN / 2) * 1.5,
-        (-PARTICLE_BOX_LEN / 2) * 1.5
-    ])
-    domain_settings.SetCoordinateLimitsMaxValues([
-        (PARTICLE_BOX_LEN / 2) * 1.5,
-        (PARTICLE_BOX_LEN / 2) * 1.5,
-        (PARTICLE_BOX_LEN / 2) * 1.5
-    ])
+    domain_settings.SetDomainType("CARTESIAN")
+    domain_settings.SetCoordinateLimitsMinValues(
+        [
+            (-PARTICLE_BOX_LEN / 2) * 1.5,
+            (-PARTICLE_BOX_LEN / 2) * 1.5,
+            (-PARTICLE_BOX_LEN / 2) * 1.5,
+        ]
+    )
+    domain_settings.SetCoordinateLimitsMaxValues(
+        [
+            (PARTICLE_BOX_LEN / 2) * 1.5,
+            (PARTICLE_BOX_LEN / 2) * 1.5,
+            (PARTICLE_BOX_LEN / 2) * 1.5,
+        ]
+    )
 
     # Set the periodic limits for the domain
     # X direction does not matter as walls are there
-    domain_settings.SetCartesianPeriodicDirections('YZ')
+    domain_settings.SetCartesianPeriodicDirections("YZ")
     domain_settings.SetPeriodicLimitsMinCoordinates(
         [-1e6, -PARTICLE_BOX_LEN / 2, -PARTICLE_BOX_LEN / 2]
     )
@@ -495,18 +482,18 @@ def _select_processor(solver, processor: str) -> None:
     - `solver`: The solver object from the Rocky study.
     - `processor`: The processor to use for the simulation ('GPU' or 'CPU').
     """
-    if processor == 'GPU':
+    if processor == "GPU":
         if processor not in solver.GetValidSimulationTargetValues():
-            warning_path = os.path.join(PROJECT_DIR, 'warnings.txt')
-            write_mode = 'w' if os.path.exists(warning_path) else 'a'
+            warning_path = os.path.join(PROJECT_DIR, "warnings.txt")
+            write_mode = "w" if os.path.exists(warning_path) else "a"
             with open(warning_path, write_mode) as f:
-                f.write('GPU was not available - switching to CPU')
-            solver.SetSimulationTarget('CPU')
+                f.write("GPU was not available - switching to CPU")
+            solver.SetSimulationTarget("CPU")
         else:
-            solver.SetSimulationTarget('GPU')
+            solver.SetSimulationTarget("GPU")
 
-    elif processor == 'CPU':
-        solver.SetSimulationTarget('CPU')
+    elif processor == "CPU":
+        solver.SetSimulationTarget("CPU")
         solver.SetNumberOfProcessors(NPROCS)
 
 
@@ -532,15 +519,15 @@ def simulate(autotimestep: bool = True, timestep=None) -> None:
     if not autotimestep:
         if not timestep:
             solver.SetUseFixedTimestep(True)
-            solver.SetFixedTimestep(1e-6, 's')
+            solver.SetFixedTimestep(1e-6, "s")
         else:
             solver.SetUseFixedTimestep(True)
-            solver.SetFixedTimestep(timestep, 's')
+            solver.SetFixedTimestep(timestep, "s")
 
     runtime = T_SETTLE + T_COMPRESSION
-    solver.SetSimulationDuration(runtime, 's')
+    solver.SetSimulationDuration(runtime, "s")
 
-    if INSERT_TYPE == 'ins':
+    if INSERT_TYPE == "ins":
         solver.SetReleaseParticlesWithoutOverlapCheck(True)
 
     project.SaveProject()
@@ -568,12 +555,9 @@ def _calc_bulk_dens(particles, time_step, sample_frac=0.9) -> float:
     **Returns:**
     - `bulk_density`: The bulk density of the particles at the given time step.
     """
-    x_coords = particles.GetGridFunction(
-        'Coordinate : X').GetArray(time_step=time_step)
-    y_coords = particles.GetGridFunction(
-        'Coordinate : Y').GetArray(time_step=time_step)
-    z_coords = particles.GetGridFunction(
-        'Coordinate : Z').GetArray(time_step=time_step)
+    x_coords = particles.GetGridFunction("Coordinate : X").GetArray(time_step=time_step)
+    y_coords = particles.GetGridFunction("Coordinate : Y").GetArray(time_step=time_step)
+    z_coords = particles.GetGridFunction("Coordinate : Z").GetArray(time_step=time_step)
 
     positions = np.vstack((x_coords, y_coords, z_coords))
     pos_rngs = np.ptp(positions, axis=1)
@@ -581,19 +565,12 @@ def _calc_bulk_dens(particles, time_step, sample_frac=0.9) -> float:
 
     processes = project.GetUserProcessCollection()
     cube_selection = processes.CreateCubeProcess(particles)
-    cube_selection.SetCenter(
-        x_coords.mean(),
-        y_coords.mean(),
-        z_coords.mean()
-    )
-    cube_selection.SetSize(
-        sample_rng[0],
-        sample_rng[1],
-        sample_rng[2]
-    )
+    cube_selection.SetCenter(x_coords.mean(), y_coords.mean(), z_coords.mean())
+    cube_selection.SetSize(sample_rng[0], sample_rng[1], sample_rng[2])
 
-    mass_arr = cube_selection.GetGridFunction(
-        'Particle Mass').GetArray(time_step=time_step)
+    mass_arr = cube_selection.GetGridFunction("Particle Mass").GetArray(
+        time_step=time_step
+    )
     sample_mass = mass_arr.sum()
     sample_vol = sample_rng.prod()
 
@@ -624,34 +601,27 @@ def post_process(plot: Optional[bool] = True) -> None:
 
     bulk_dens = []
     if plot:
-        PLOTS_DIR = os.path.join(PROJECT_DIR, 'plots')
-        for timestep in np.nditer(time_set, flags=['refs_ok']):
-            bulk_dens_ts = _calc_bulk_dens(
-                particles, timestep.item(),
-                sample_frac=0.9
-            )
+        PLOTS_DIR = os.path.join(PROJECT_DIR, "plots")
+        for timestep in np.nditer(time_set, flags=["refs_ok"]):
+            bulk_dens_ts = _calc_bulk_dens(particles, timestep.item(), sample_frac=0.9)
             bulk_dens.append(bulk_dens_ts)
 
         bulk_dens_t = np.array(bulk_dens)
 
         fig, ax = plt.subplots(figsize=(10, 6))
-        color = 'tab:blue'
-        ax.set_xlabel('Time (s)')
-        ax.set_ylabel('Bulk Density (kg/m³)', color=color)
+        color = "tab:blue"
+        ax.set_xlabel("Time (s)")
+        ax.set_ylabel("Bulk Density (kg/m³)", color=color)
         ax.plot(timeset_arr, bulk_dens_t, color=color)
-        ax.tick_params(axis='y', labelcolor=color)
+        ax.tick_params(axis="y", labelcolor=color)
 
-        ax.set_title('Bulk Density vs Time')
+        ax.set_title("Bulk Density vs Time")
         ax.grid(True, alpha=0.3)
 
         fig.tight_layout()
-        fig.savefig(
-            os.path.join(
-                PLOTS_DIR,
-                'bulk_density_voidage.png'),
-            dpi=300)
+        fig.savefig(os.path.join(PLOTS_DIR, "bulk_density_voidage.png"), dpi=300)
 
-    case_num = int(os.path.basename(PROJECT_DIR).split('_')[-1])
+    case_num = int(os.path.basename(PROJECT_DIR).split("_")[-1])
     n_particles = int(particles.GetNumberOfParticles(0))
     particles_lost = int(n_particles - particles.GetNumberOfParticles(-1))
 
@@ -664,45 +634,89 @@ def post_process(plot: Optional[bool] = True) -> None:
     smoothness = particle.GetSmoothness()
 
     col_vals = [
-        case_num, P_RADIUS, P_DENSITY, P_YOUNGMOD, P_POISSON,
-        PP_DYNAMIC_FRICTION, PP_STATIC_FRICTION, PP_COR,
-        PW_DYNAMIC_FRICTION, PW_STATIC_FRICTION, PW_COR,
-        ROLLING_FRICTION, COMPR_PRESSURE,
-        NORMAL_FORCE_MODEL, TANGENTIAL_FORCE_MODEL, ADHESION_MODEL,
-        ROLLING_MODEL, PARTICLE_BOX_LEN, n_particles,
-        shape_name, vert_ar, horiz_ar, n_corners,
-        sq_degree, smoothness, uncompr_dens, compr_dens,
-        hausner_ratio, compr_idx, particles_lost
+        case_num,
+        P_RADIUS,
+        P_DENSITY,
+        P_YOUNGMOD,
+        P_POISSON,
+        PP_DYNAMIC_FRICTION,
+        PP_STATIC_FRICTION,
+        PP_COR,
+        PW_DYNAMIC_FRICTION,
+        PW_STATIC_FRICTION,
+        PW_COR,
+        ROLLING_FRICTION,
+        COMPR_PRESSURE,
+        NORMAL_FORCE_MODEL,
+        TANGENTIAL_FORCE_MODEL,
+        ADHESION_MODEL,
+        ROLLING_MODEL,
+        PARTICLE_BOX_LEN,
+        n_particles,
+        shape_name,
+        vert_ar,
+        horiz_ar,
+        n_corners,
+        sq_degree,
+        smoothness,
+        uncompr_dens,
+        compr_dens,
+        hausner_ratio,
+        compr_idx,
+        particles_lost,
     ]
 
     col_names = [
-        'case_n', 'p_radius', 'p_density', 'p_youngmod', 'p_poisson',
-        'pp_dynamic_friction', 'pp_static_friction', 'pp_cor',
-        'pw_dynamic_friction', 'pw_static_friction', 'pw_cor',
-        'rolling_friction', 'compression_pressure',
-        'normal_force_model', 'tangential_force_model', 'adhesion_model',
-        'rolling_model', 'box_len', 'n_particles', 'shape_name', 'vert_ar',
-        'horiz_ar', 'n_corners', 'sq_degree', 'smoothness', 'bulk_density',
-        'compressed_density', 'hausner_ratio', 'compression_index', 'n_lost'
+        "case_n",
+        "p_radius",
+        "p_density",
+        "p_youngmod",
+        "p_poisson",
+        "pp_dynamic_friction",
+        "pp_static_friction",
+        "pp_cor",
+        "pw_dynamic_friction",
+        "pw_static_friction",
+        "pw_cor",
+        "rolling_friction",
+        "compression_pressure",
+        "normal_force_model",
+        "tangential_force_model",
+        "adhesion_model",
+        "rolling_model",
+        "box_len",
+        "n_particles",
+        "shape_name",
+        "vert_ar",
+        "horiz_ar",
+        "n_corners",
+        "sq_degree",
+        "smoothness",
+        "bulk_density",
+        "compressed_density",
+        "hausner_ratio",
+        "compression_index",
+        "n_lost",
     ]
 
-    assert len(col_vals) == len(col_names), \
+    assert len(col_vals) == len(col_names), (
         "Column values and names must have the same length."
+    )
 
     # Write results to a CSV file
-    with open('results.csv', 'w') as f:
+    with open("results.csv", "w") as f:
         # Convert col_names to a comma-separated string
-        f.write(','.join(col_names))
-        f.write('\n')
+        f.write(",".join(col_names))
+        f.write("\n")
         # Convert cols to a comma-separated string
-        f.write(','.join(map(str, col_vals)))
+        f.write(",".join(map(str, col_vals)))
 
     # Dump the results to a SQLite database
-    sqlite_path = os.path.abspath('../results.db')
+    sqlite_path = os.path.abspath("../results.db")
     with sqlite3.connect(sqlite_path) as conn:
         cursor = conn.cursor()
 
-        create_table_query = '''CREATE TABLE IF NOT EXISTS results (
+        create_table_query = """CREATE TABLE IF NOT EXISTS results (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             case_n INTEGER,
             p_radius REAL,
@@ -734,8 +748,8 @@ def post_process(plot: Optional[bool] = True) -> None:
             hausner_ratio REAL,
             compression_index REAL,
             n_lost INTEGER
-        )'''
-        insert_query = f'''INSERT INTO results (
+        )"""
+        insert_query = f"""INSERT INTO results (
             case_n, p_radius, p_density, p_youngmod, p_poisson,
             pp_dynamic_friction, pp_static_friction, pp_cor,
             pw_dynamic_friction, pw_static_friction, pw_cor,
@@ -744,8 +758,8 @@ def post_process(plot: Optional[bool] = True) -> None:
             rolling_model, box_len, n_particles, shape_name, vert_ar, horiz_ar, n_corners,
             sq_degree, smoothness, bulk_density, compressed_density,
             hausner_ratio, compression_index, n_lost
-        ) VALUES ({','.join(['?'] * len(col_vals))})
-        '''
+        ) VALUES ({",".join(["?"] * len(col_vals))})
+        """
 
         try:
             cursor.execute(create_table_query)
@@ -767,7 +781,7 @@ shape_dict = {
     "n_corners": {{N_CORNERS}},
     "sq_degree": {{SQ_DEGREE}},
     "particle_path": "{{PARTICLE_PATH}}",
-    "smoothness": {{SMOOTHNESS}}
+    "smoothness": {{SMOOTHNESS}},
 }
 
 setup()

@@ -15,20 +15,26 @@ class cd:
     def __exit__(self, etype, value, traceback):
         os.chdir(self.savedPath)
 
-def slurm_sbatch(case_dir: str, loc: str, autolaunch: bool = False, 
-    custom_msg: str = None, ncpus: int = None):
+
+def slurm_sbatch(
+    case_dir: str,
+    loc: str,
+    autolaunch: bool = False,
+    custom_msg: str = None,
+    ncpus: int = None,
+):
     """Create a slurm sbatch script for each case.
     Change if needed.
     """
 
-    if loc == 'bb-cpu' and not ncpus:
+    if loc == "bb-cpu" and not ncpus:
         ncpus = 20
 
     # Define the sbatch script template
     # This is a simple template. You can modify it as needed.
 
     # For UoB BlueBear use
-    if loc == 'bb-cpu':
+    if loc == "bb-cpu":
         template = f"""#!/bin/bash
 #SBATCH --job-name=uniaxc
 #SBATCH --ntasks={ncpus}
@@ -50,7 +56,7 @@ Rocky --script "script_uniax.py" --headless >> rocky.log
 
     # For AZ SCP use
     elif loc == "az-gpu":
-        template="""#!/bin/sh
+        template = """#!/bin/sh
 #SBATCH --job-name=uniaxc
 #SBATCH --ntasks=1
 #SBATCH --time=5-0
@@ -65,19 +71,19 @@ ml rocky/24.2.0
 Rocky --script "script_uniax.py" --headless >> rocky.log
 
     """
-    elif loc == 'custom':
-        if custom_msg and custom_msg.startswith('#!/bin/bash'):
+    elif loc == "custom":
+        if custom_msg and custom_msg.startswith("#!/bin/bash"):
             template = custom_msg
         else:
-            raise ValueError('Invalid custom message provided')
-        
+            raise ValueError("Invalid custom message provided")
+
     else:
-        raise ValueError('Only')
+        raise ValueError("Only")
     # Write the sbatch script to a file
-    write_path = os.path.join(case_dir, 'runRocky.sh')
+    write_path = os.path.join(case_dir, "runRocky.sh")
 
     #  Create the sbatch script in sweeping directory
-    with open(write_path, 'w') as sbatch_file:
+    with open(write_path, "w") as sbatch_file:
         sbatch_file.write(template)
 
     # Launch the sbatch script from each case directory
@@ -85,8 +91,12 @@ Rocky --script "script_uniax.py" --headless >> rocky.log
         with cd(case_dir):
             try:
                 result = subprocess.run(
-                    ['sbatch', 'runRocky.sh'], check=True, capture_output=True, text=True)
-                os.mkdir('plots')
+                    ["sbatch", "runRocky.sh"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                os.mkdir("plots")
                 print(f"Job submitted successfully: {result.stdout}")
             except subprocess.CalledProcessError as e:
                 print(f"Error submitting job: {e.stderr}")

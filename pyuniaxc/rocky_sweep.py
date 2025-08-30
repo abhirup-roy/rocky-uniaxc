@@ -48,12 +48,12 @@ def iter_params(json_path: str):
         json_path: Path to json config for sweep
     """
     # Load the JSON file
-    with open(json_path, 'r') as f_params:
+    with open(json_path, "r") as f_params:
         params = json.load(f_params, object_pairs_hook=OrderedDict)
 
     # Handle shape parameters - now it's an array of shape objects
-    shape_list = params['shape']
-    
+    shape_list = params["shape"]
+
     # Extract all possible values for each shape parameter
     shape_names = []
     vert_ars = []
@@ -61,49 +61,51 @@ def iter_params(json_path: str):
     n_corners_list = []
     sq_degrees = []
     particle_paths = []
-    
+
     for shape in shape_list:
-        shape_names.append(shape.get('name', 'sphere'))
-        vert_ars.append(shape.get('vert_ar', 1.0))
-        horiz_ars.append(shape.get('horiz_ar', 1.0))
-        n_corners_list.append(shape.get('n_corners', 6))
-        sq_degrees.append(shape.get('sq_degrees', 1.0))  # Note: using 'sq_degrees' to match JSON
-        particle_paths.append(shape.get('particle_path', ''))
+        shape_names.append(shape.get("name", "sphere"))
+        vert_ars.append(shape.get("vert_ar", 1.0))
+        horiz_ars.append(shape.get("horiz_ar", 1.0))
+        n_corners_list.append(shape.get("n_corners", 6))
+        sq_degrees.append(
+            shape.get("sq_degrees", 1.0)
+        )  # Note: using 'sq_degrees' to match JSON
+        particle_paths.append(shape.get("particle_path", ""))
 
     # Find all combinations of parameters
     param_combinations = itertools.product(
-        params['particle_properties']['radius'],
-        params['particle_properties']['density'],
-        params['particle_properties']['poisson'],
-        params['particle_properties']['youngmod'],
-        params['inseractions']['pp']['fric_dyn'],
-        params['inseractions']['pp']['fric_stat'],
-        params['inseractions']['pp']['fric_rolling'],
-        params['inseractions']['pp']['cor'],
-        params['inseractions']['pw']['fric_dyn'],
-        params['inseractions']['pw']['fric_stat'],
-        params['inseractions']['pw']['cor'],
-        params['experim_settings']['box_len'],
-        params['experim_settings']['p_compress'],
-        params['contact_model']['normal'],
-        params['contact_model']['tangential'],
-        params['contact_model']['rolling'],
-        params['contact_model']['adhesion'],
-        shape_list
+        params["particle_properties"]["radius"],
+        params["particle_properties"]["density"],
+        params["particle_properties"]["poisson"],
+        params["particle_properties"]["youngmod"],
+        params["inseractions"]["pp"]["fric_dyn"],
+        params["inseractions"]["pp"]["fric_stat"],
+        params["inseractions"]["pp"]["fric_rolling"],
+        params["inseractions"]["pp"]["cor"],
+        params["inseractions"]["pw"]["fric_dyn"],
+        params["inseractions"]["pw"]["fric_stat"],
+        params["inseractions"]["pw"]["cor"],
+        params["experim_settings"]["box_len"],
+        params["experim_settings"]["p_compress"],
+        params["contact_model"]["normal"],
+        params["contact_model"]["tangential"],
+        params["contact_model"]["rolling"],
+        params["contact_model"]["adhesion"],
+        shape_list,
     )
     return param_combinations
 
 
 def make_cases(
-        sweep_name: str,
-        meshdir: str = 'meshes',
-        json_path: str = 'params.json',
-        template_dir: Optional[str] = None,
-        autolaunch=True,
-        loc: str = 'bb-cpu',
-        custom_sh: str = None,
-        target: str = 'CPU',
-        ncpus: int = None
+    sweep_name: str,
+    meshdir: str = "meshes",
+    json_path: str = "params.json",
+    template_dir: Optional[str] = None,
+    autolaunch=True,
+    loc: str = "bb-cpu",
+    custom_sh: str = None,
+    target: str = "CPU",
+    ncpus: int = None,
 ):
     """
     Generate and launch sweep cases
@@ -121,26 +123,26 @@ def make_cases(
     """
     # Ensure the template directory exists
     if not template_dir:
-        template_dir = os.path.join(os.path.dirname(__file__), 'templates')
+        template_dir = os.path.join(os.path.dirname(__file__), "templates")
     else:
         template_dir = os.path.abspath(template_dir)
     if not os.path.exists(template_dir):
         raise FileNotFoundError(f"Directory {template_dir} does not exist.")
-    
+
     target = target.upper()
-    if target not in ['CPU', 'GPU', 'MULTI_GPU']:
+    if target not in ["CPU", "GPU", "MULTI_GPU"]:
         raise ValueError("Select from 'CPU', 'GPU', 'MULTI_GPU'")
-    elif target == 'MULTI_GPU':
-        raise NotImplementedError('Multi GPU use not validated yet')
-    
-    if (loc == 'bb-cpu' and target == 'GPU') or (loc == 'az-gpu' and target == 'CPU'):
-        raise ValueError(f'{target} is not valid for location {loc}')
+    elif target == "MULTI_GPU":
+        raise NotImplementedError("Multi GPU use not validated yet")
+
+    if (loc == "bb-cpu" and target == "GPU") or (loc == "az-gpu" and target == "CPU"):
+        raise ValueError(f"{target} is not valid for location {loc}")
     target = '"' + target + '"'
     # Load template once
     rocky_templ_env = jinja2.Environment(
-        loader=jinja2.FileSystemLoader(f'{template_dir}')
+        loader=jinja2.FileSystemLoader(f"{template_dir}")
     )
-    rocky_template = rocky_templ_env.get_template('template_uniax.py')
+    rocky_template = rocky_templ_env.get_template("template_uniax.py")
 
     # Get all parameter combinations
     all_params = list(iter_params(json_path))
@@ -153,22 +155,21 @@ def make_cases(
     # Create directories for all cases first (parallel processing preparation)
     case_dirs = []
     for i in range(total_cases):
-        case_dir = os.path.join(sweep_name, f'case_{i}')
+        case_dir = os.path.join(sweep_name, f"case_{i}")
         os.makedirs(case_dir, exist_ok=True)
-        os.makedirs(os.path.join(case_dir, 'plots'), exist_ok=True)
+        os.makedirs(os.path.join(case_dir, "plots"), exist_ok=True)
         os.makedirs(os.path.join(case_dir, meshdir), exist_ok=True)
         case_dirs.append(case_dir)
 
     # Generate meshes only once per unique size
     # This is a major optimization - don't recreate identical meshes
-    unique_sizes = set([params[11]
-                       for params in all_params])  # Box length parameter
+    unique_sizes = set([params[11] for params in all_params])  # Box length parameter
     size_to_mesh_dir = {}
 
     print(f"Generating meshes for {len(unique_sizes)} unique sizes...")
     for size in unique_sizes:
         # Create a shared mesh directory for this size
-        shared_mesh_dir = os.path.join(sweep_name, f'meshes_{size}')
+        shared_mesh_dir = os.path.join(sweep_name, f"meshes_{size}")
         os.makedirs(shared_mesh_dir, exist_ok=True)
 
         # Generate meshes only once for each unique size
@@ -186,50 +187,54 @@ def make_cases(
 
         # Prepare script context
         script_contxt = {
-            'RADIUS_P': params[0],
-            'DENSITY_P': params[1],
-            'POISSON_P': params[2],
-            'YOUNGMOD_P': params[3],
-            'DYNAMIC_FRICTION_PP': params[4],
-            'STATIC_FRICTION_PP': params[5],
-            'COR_PP': params[7],
-            'DYNAMIC_FRICTION_PW': params[8],
-            'STATIC_FRICTION_PW': params[9],
-            'COR_PW': params[10],
-            'L_BOX': params[11],
-            'P_COMPRESS': params[12],
-            'NORMAL_MODEL': params[13],
-            'TANG_MODEL': params[14],
-            'ROLLING_MODEL': params[15],
-            'ADH_MODEL': params[16],
-            'SHAPE': params[-1].get('name', 'sphere'),  # Use the name from the shape object
-            'VERT_AR': params[-1].get('vert_ar', 0.5),
-            'HORIZ_AR': params[-1].get('horiz_ar', 1.0),
-            'N_CORNERS': int(params[-1].get('n_corners', 8)),
-            'SQ_DEGREE': params[-1].get('sq_degree', 2.0),
-            'PARTICLE_PATH': params[-1].get('particle_path', ''),
-            'SMOOTHNESS': params[-1].get('smoothness', 0.5),
-            'MESH_DIR': str(meshdir),
-            'XPU': target
+            "RADIUS_P": params[0],
+            "DENSITY_P": params[1],
+            "POISSON_P": params[2],
+            "YOUNGMOD_P": params[3],
+            "DYNAMIC_FRICTION_PP": params[4],
+            "STATIC_FRICTION_PP": params[5],
+            "COR_PP": params[7],
+            "DYNAMIC_FRICTION_PW": params[8],
+            "STATIC_FRICTION_PW": params[9],
+            "COR_PW": params[10],
+            "L_BOX": params[11],
+            "P_COMPRESS": params[12],
+            "NORMAL_MODEL": params[13],
+            "TANG_MODEL": params[14],
+            "ROLLING_MODEL": params[15],
+            "ADH_MODEL": params[16],
+            "SHAPE": params[-1].get(
+                "name", "sphere"
+            ),  # Use the name from the shape object
+            "VERT_AR": params[-1].get("vert_ar", 0.5),
+            "HORIZ_AR": params[-1].get("horiz_ar", 1.0),
+            "N_CORNERS": int(params[-1].get("n_corners", 8)),
+            "SQ_DEGREE": params[-1].get("sq_degree", 2.0),
+            "PARTICLE_PATH": params[-1].get("particle_path", ""),
+            "SMOOTHNESS": params[-1].get("smoothness", 0.5),
+            "MESH_DIR": str(meshdir),
+            "XPU": target,
         }
 
         if params[15] != '"none"':
-            script_contxt['ROLLING_FRICTION'] = params[6]
+            script_contxt["ROLLING_FRICTION"] = params[6]
 
         print(params)
 
         # Render template and write script
         rendered_content = rocky_template.render(script_contxt)
-        script_path = os.path.join(case_dir, 'script_uniax.py')
+        script_path = os.path.join(case_dir, "script_uniax.py")
 
-        with open(script_path, 'w') as script_file:
+        with open(script_path, "w") as script_file:
             script_file.write(rendered_content)
 
         # Log case information
         print(f"Case {i}/{total_cases} prepared")
 
         # Create SLURM script
-        slurm_sbatch(case_dir, loc=loc, autolaunch=False, custom_msg=custom_sh, ncpus=ncpus)  # Don't launch yet
+        slurm_sbatch(
+            case_dir, loc=loc, autolaunch=False, custom_msg=custom_sh, ncpus=ncpus
+        )  # Don't launch yet
 
     # Launch all cases at once if requested
     if autolaunch:
@@ -240,7 +245,11 @@ def make_cases(
             with cd(case_dir):
                 try:
                     result = subprocess.run(
-                        ['sbatch', 'runRocky.sh'], check=True, capture_output=True, text=True)
+                        ["sbatch", "runRocky.sh"],
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                    )
                     print(f"Job submitted: {result.stdout.strip()}")
                 except subprocess.CalledProcessError as e:
                     print(f"Error submitting job: {e.stderr}")
@@ -250,7 +259,6 @@ def make_cases(
 
 
 if __name__ == "__main__":
-
     """Example of a regular sweep"""
     # make_cases(
     #     sweep_name='reg_sweep_example',
@@ -277,16 +285,16 @@ if __name__ == "__main__":
     # )
 
     launch_ofat(
-        'ofat_examplev_test',
+        "ofat_examplev_test",
         autolaunch=False,
-        json_path='json/ofat_base.json',
+        json_path="json/ofat_base.json",
         ofat_values={
-            'parameters':['n_corners', 'sq_degree'],
-            'test_range':[(10, 50), (2.0, 10.0)],
-            'hold_values': ['m', 'l']
+            "parameters": ["n_corners", "sq_degree"],
+            "test_range": [(10, 50), (2.0, 10.0)],
+            "hold_values": ["m", "l"],
         },
         n_points=5,
-        loc='az-gpu',
-        target='GPU',
-        ncpus=20
+        loc="az-gpu",
+        target="GPU",
+        ncpus=20,
     )

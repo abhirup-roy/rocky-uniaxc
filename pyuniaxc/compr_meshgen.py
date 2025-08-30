@@ -16,7 +16,6 @@ import gmsh
 
 
 def create_particlebox(size, meshsize=0.001, gui=False):
-
     gmsh.initialize(sys.argv)
     gmsh.model.add("particlebox")
 
@@ -24,22 +23,14 @@ def create_particlebox(size, meshsize=0.001, gui=False):
     half_size = size / 2
 
     # Define the points for the cube
-    p1 = gmsh.model.geo.addPoint(-half_size, -half_size,
-                                 -half_size, meshSize=meshsize)
-    p2 = gmsh.model.geo.addPoint(half_size, -half_size,
-                                 -half_size, meshSize=meshsize)
-    p3 = gmsh.model.geo.addPoint(half_size, half_size,
-                                 -half_size, meshSize=meshsize)
-    p4 = gmsh.model.geo.addPoint(-half_size, half_size,
-                                 -half_size, meshSize=meshsize)
-    p5 = gmsh.model.geo.addPoint(-half_size, -half_size,
-                                 half_size, meshSize=meshsize)
-    p6 = gmsh.model.geo.addPoint(half_size, -half_size,
-                                 half_size, meshSize=meshsize)
-    p7 = gmsh.model.geo.addPoint(half_size, half_size,
-                                 half_size, meshSize=meshsize)
-    p8 = gmsh.model.geo.addPoint(-half_size, half_size,
-                                 half_size, meshSize=meshsize)
+    p1 = gmsh.model.geo.addPoint(-half_size, -half_size, -half_size, meshSize=meshsize)
+    p2 = gmsh.model.geo.addPoint(half_size, -half_size, -half_size, meshSize=meshsize)
+    p3 = gmsh.model.geo.addPoint(half_size, half_size, -half_size, meshSize=meshsize)
+    p4 = gmsh.model.geo.addPoint(-half_size, half_size, -half_size, meshSize=meshsize)
+    p5 = gmsh.model.geo.addPoint(-half_size, -half_size, half_size, meshSize=meshsize)
+    p6 = gmsh.model.geo.addPoint(half_size, -half_size, half_size, meshSize=meshsize)
+    p7 = gmsh.model.geo.addPoint(half_size, half_size, half_size, meshSize=meshsize)
+    p8 = gmsh.model.geo.addPoint(-half_size, half_size, half_size, meshSize=meshsize)
 
     # Define the lines for the cube
     l1 = gmsh.model.geo.addLine(p1, p2)
@@ -56,26 +47,29 @@ def create_particlebox(size, meshsize=0.001, gui=False):
     l12 = gmsh.model.geo.addLine(p8, p5)
 
     # Define the surfaces for the cube (excluding the top face)
-    s1 = gmsh.model.geo.addPlaneSurface(
-        [gmsh.model.geo.addCurveLoop([l1, l2, l3, l4])])
+    s1 = gmsh.model.geo.addPlaneSurface([gmsh.model.geo.addCurveLoop([l1, l2, l3, l4])])
     s2 = gmsh.model.geo.addPlaneSurface(
-        [gmsh.model.geo.addCurveLoop([l1, l6, -l9, -l5])])
+        [gmsh.model.geo.addCurveLoop([l1, l6, -l9, -l5])]
+    )
     s3 = gmsh.model.geo.addPlaneSurface(
-        [gmsh.model.geo.addCurveLoop([l2, l7, -l10, -l6])])
+        [gmsh.model.geo.addCurveLoop([l2, l7, -l10, -l6])]
+    )
     s4 = gmsh.model.geo.addPlaneSurface(
-        [gmsh.model.geo.addCurveLoop([l3, l8, -l11, -l7])])
+        [gmsh.model.geo.addCurveLoop([l3, l8, -l11, -l7])]
+    )
     s5 = gmsh.model.geo.addPlaneSurface(
-        [gmsh.model.geo.addCurveLoop([l4, l5, -l12, -l8])])
+        [gmsh.model.geo.addCurveLoop([l4, l5, -l12, -l8])]
+    )
 
     # Create a volume from the surfaces
     gmsh.model.geo.addSurfaceLoop([s1, s2, s3, s4, s5])
     gmsh.model.geo.synchronize()
     gmsh.model.mesh.generate(3)
 
-    if gui and '-nopopup' not in sys.argv:
+    if gui and "-nopopup" not in sys.argv:
         gmsh.fltk.run()
     # Save the mesh to a file
-    gmsh.write(os.path.join('meshes', 'particlebox.stl'))
+    gmsh.write(os.path.join("meshes", "particlebox.stl"))
     gmsh.finalize()
 
 
@@ -86,62 +80,51 @@ def create_compr_walls(size, meshsize=0.001, gui=False):
         gmsh.initialize(sys.argv)
         gmsh.model.add("compressive_walls")
 
-        p1 = gmsh.model.geo.addPoint(-half_size, -size,
-                                     -half_size, meshSize=meshsize)
-        p2 = gmsh.model.geo.addPoint(half_size, -size,
-                                     -half_size, meshSize=meshsize)
-        p3 = gmsh.model.geo.addPoint(-half_size, -size,
-                                     half_size, meshSize=meshsize)
-        p4 = gmsh.model.geo.addPoint(half_size, -size,
-                                     half_size, meshSize=meshsize)
+        p1 = gmsh.model.geo.addPoint(-half_size, -size, -half_size, meshSize=meshsize)
+        p2 = gmsh.model.geo.addPoint(half_size, -size, -half_size, meshSize=meshsize)
+        p3 = gmsh.model.geo.addPoint(-half_size, -size, half_size, meshSize=meshsize)
+        p4 = gmsh.model.geo.addPoint(half_size, -size, half_size, meshSize=meshsize)
 
         l1 = gmsh.model.geo.addLine(p1, p2)
         l2 = gmsh.model.geo.addLine(p2, p4)
         l3 = gmsh.model.geo.addLine(p4, p3)
         l4 = gmsh.model.geo.addLine(p3, p1)
 
-        gmsh.model.geo.addPlaneSurface(
-            [gmsh.model.geo.addCurveLoop([l1, l2, l3, l4])]
-        )
+        gmsh.model.geo.addPlaneSurface([gmsh.model.geo.addCurveLoop([l1, l2, l3, l4])])
 
         gmsh.model.geo.synchronize()
         gmsh.model.mesh.generate(3)
 
-        if gui and '-nopopup' not in sys.argv:
+        if gui and "-nopopup" not in sys.argv:
             gmsh.fltk.run()
         # Save the mesh to a file
-        gmsh.write(os.path.join('meshes', 'compressive_wall1.stl'))
+        gmsh.write(os.path.join("meshes", "compressive_wall1.stl"))
 
         gmsh.finalize()
 
     def wall2():
         gmsh.initialize(sys.argv)
-        p1 = gmsh.model.geo.addPoint(half_size, size,
-                                     -half_size, meshSize=meshsize)
-        p2 = gmsh.model.geo.addPoint(-half_size, size,
-                                     -half_size, meshSize=meshsize)
-        p3 = gmsh.model.geo.addPoint(half_size, size,
-                                     half_size, meshSize=meshsize)
-        p4 = gmsh.model.geo.addPoint(-half_size, size,
-                                     half_size, meshSize=meshsize)
+        p1 = gmsh.model.geo.addPoint(half_size, size, -half_size, meshSize=meshsize)
+        p2 = gmsh.model.geo.addPoint(-half_size, size, -half_size, meshSize=meshsize)
+        p3 = gmsh.model.geo.addPoint(half_size, size, half_size, meshSize=meshsize)
+        p4 = gmsh.model.geo.addPoint(-half_size, size, half_size, meshSize=meshsize)
 
         l1 = gmsh.model.geo.addLine(p1, p2)
         l2 = gmsh.model.geo.addLine(p2, p4)
         l3 = gmsh.model.geo.addLine(p4, p3)
         l4 = gmsh.model.geo.addLine(p3, p1)
-        gmsh.model.geo.addPlaneSurface(
-            [gmsh.model.geo.addCurveLoop([l1, l2, l3, l4])]
-        )
+        gmsh.model.geo.addPlaneSurface([gmsh.model.geo.addCurveLoop([l1, l2, l3, l4])])
         gmsh.model.geo.synchronize()
         gmsh.model.mesh.generate(3)
         # Save the mesh to a file
-        gmsh.write(os.path.join('meshes', 'compressive_wall2.stl'))
-        if gui and '-nopopup' not in sys.argv:
+        gmsh.write(os.path.join("meshes", "compressive_wall2.stl"))
+        if gui and "-nopopup" not in sys.argv:
             gmsh.fltk.run()
         gmsh.finalize()
 
     wall1()
     wall2()
+
 
 def create_insert(size, meshsize=0.001, gui=False):
     gmsh.initialize(sys.argv)
@@ -151,33 +134,27 @@ def create_insert(size, meshsize=0.001, gui=False):
     half_size = size / 2
 
     # Define the points for the cube
-    p1 = gmsh.model.geo.addPoint(-half_size, -half_size,
-                                 half_size, meshSize=meshsize)
-    p2 = gmsh.model.geo.addPoint(half_size, -half_size,
-                                 half_size, meshSize=meshsize)
-    p3 = gmsh.model.geo.addPoint(half_size, half_size,
-                                 half_size, meshSize=meshsize)
-    p4 = gmsh.model.geo.addPoint(-half_size, half_size,
-                                 half_size, meshSize=meshsize)
+    p1 = gmsh.model.geo.addPoint(-half_size, -half_size, half_size, meshSize=meshsize)
+    p2 = gmsh.model.geo.addPoint(half_size, -half_size, half_size, meshSize=meshsize)
+    p3 = gmsh.model.geo.addPoint(half_size, half_size, half_size, meshSize=meshsize)
+    p4 = gmsh.model.geo.addPoint(-half_size, half_size, half_size, meshSize=meshsize)
 
     l1 = gmsh.model.geo.addLine(p1, p2)
     l2 = gmsh.model.geo.addLine(p2, p3)
     l3 = gmsh.model.geo.addLine(p3, p4)
     l4 = gmsh.model.geo.addLine(p4, p1)
 
-    gmsh.model.geo.addPlaneSurface(
-        [gmsh.model.geo.addCurveLoop([l1, l2, l3, l4])]
-    )
+    gmsh.model.geo.addPlaneSurface([gmsh.model.geo.addCurveLoop([l1, l2, l3, l4])])
     gmsh.model.geo.synchronize()
     gmsh.model.mesh.generate(3)
-    if gui and '-nopopup' not in sys.argv:
+    if gui and "-nopopup" not in sys.argv:
         gmsh.fltk.run()
     # Save the mesh to a file
-    gmsh.write(os.path.join('meshes', 'insert.stl'))
+    gmsh.write(os.path.join("meshes", "insert.stl"))
     gmsh.finalize()
 
 
-def create_meshes_efficiently(size, meshsize=0.001, out_dir='meshes'):
+def create_meshes_efficiently(size, meshsize=0.001, out_dir="meshes"):
     """Create all required meshes with a single GMSH instance."""
     os.makedirs(out_dir, exist_ok=True)
     half_size = size / 2
@@ -200,7 +177,7 @@ def create_meshes_efficiently(size, meshsize=0.001, out_dir='meshes'):
     gmsh.model.geo.addPlaneSurface([gmsh.model.geo.addCurveLoop([l1, l2, l3, l4])])
     gmsh.model.geo.synchronize()
     gmsh.model.mesh.generate(3)
-    gmsh.write(os.path.join(out_dir, 'compressive_wall1.stl'))
+    gmsh.write(os.path.join(out_dir, "compressive_wall1.stl"))
     gmsh.model.remove()  # Clear current model
 
     # Second wall
@@ -218,7 +195,7 @@ def create_meshes_efficiently(size, meshsize=0.001, out_dir='meshes'):
     gmsh.model.geo.addPlaneSurface([gmsh.model.geo.addCurveLoop([l1, l2, l3, l4])])
     gmsh.model.geo.synchronize()
     gmsh.model.mesh.generate(3)
-    gmsh.write(os.path.join(out_dir, 'compressive_wall2.stl'))
+    gmsh.write(os.path.join(out_dir, "compressive_wall2.stl"))
     gmsh.model.remove()
 
     # Insert
@@ -236,7 +213,7 @@ def create_meshes_efficiently(size, meshsize=0.001, out_dir='meshes'):
     gmsh.model.geo.addPlaneSurface([gmsh.model.geo.addCurveLoop([l1, l2, l3, l4])])
     gmsh.model.geo.synchronize()
     gmsh.model.mesh.generate(3)
-    gmsh.write(os.path.join(out_dir, 'insert.stl'))
+    gmsh.write(os.path.join(out_dir, "insert.stl"))
 
     # Finalize GMSH
     gmsh.finalize()

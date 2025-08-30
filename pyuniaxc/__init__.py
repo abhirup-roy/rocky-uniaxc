@@ -7,13 +7,9 @@ multiscale uniaxial compression.
 Author: Abhirup Roy
 """
 
-__version__ = '0.1'
-__author__ = 'Abhirup Roy'
-__all__ = [
-    'launch_sweep',
-    'launch_ofat',
-    'analyse'
-]
+__version__ = "0.1"
+__author__ = "Abhirup Roy"
+__all__ = ["launch_sweep", "launch_ofat", "analyse"]
 
 from .rocky_sweep import make_cases as launch_sweep
 from .rocky_doe import launch_ofat
