@@ -83,15 +83,13 @@ ADHESION_MODEL = "{{ADH_MODEL}}"
 assert ADHESION_MODEL in ["none", "constant", "linear", "JKR", "custom"]
 
 PARTICLE_BOX_LEN: float = {{L_BOX}}  # m
-T_FILL: float = 0  # s
-T_SETTLE: float = 1.5  # s
+T_FILL: float = 0.5  # s
+T_SETTLE: float = 1  # s
 
 COMPR_PRESSURE: float = {{P_COMPRESS}}  # Pa
 T_COMPRESSION: float = 1  # s
 
-# Insert type
-INSERT_TYPE: str = "vol"  # 'vol', 'ins'
-assert INSERT_TYPE in ["vol", "ins"]
+INSERT = True # If False, use volumetric inlet
 
 # Solver settings
 NPROCS = os.environ.get("SLURM_CPUS_ON_NODE", 20)
@@ -146,7 +144,7 @@ def setup(filename="uniaxial_compression.rocky") -> None:
         _run_flag = True
 
 
-def load_meshes() -> None:
+def load_meshes(insert=True) -> None:
     """
     Load the walls into the Rocky project.
     """
@@ -161,28 +159,35 @@ def load_meshes() -> None:
 
     # Load Top Wall
     top_wall = study.ImportWall(
-        compr_wall1_stl_path, import_scale=1.0, convert_yz=True
+        compr_wall1_stl_path, import_scale=1.1, convert_yz=True
     )[0]
     top_wall.SetName("Top Wall")
     top_wall.SetBoundaryMass(1e-6)
     top_wall.SetTranslation([-PARTICLE_BOX_LEN / 2, 0, 0])
 
+    top_wall.SetEnableTime(T_SETTLE + 0.5)
+
     # Load bottom wall with a slight offset
     # to avoid overlap wth periodic boundary
     bottom_wall = study.ImportWall(
-        compr_wall2_stl_path, import_scale=1.0, convert_yz=True
+        compr_wall2_stl_path, import_scale=1.1, convert_yz=True
     )[0]
     bottom_wall.SetName("Bottom Wall")
     bottom_wall.SetTranslation([PARTICLE_BOX_LEN / 2 + 1e-6, 0, 0])
 
-    if INSERT_TYPE == "ins":
+    if insert:
         insert_stl_path = os.path.join(MESHDIR, "insert.stl")
 
         global insert_inlet
         insert_inlet = study.ImportSurface(
-            insert_stl_path, import_scale=0.99, convert_yz=True
+            insert_stl_path, import_scale=1., convert_yz=True
         )[0]
+
         insert_inlet.SetName("Insert Inlet")
+        insert_inlet.SetPivotPoint([0, 0, 0])
+        insert_inlet.SetOrientationFromAngles(rotation = [0, 0, -90])
+        insert_inlet.SetTranslation([0.45 * PARTICLE_BOX_LEN/2, 0, 0])
+        insert_inlet.SetInvertNormal(True)
 
 
 def load_material_properties():
@@ -364,7 +369,7 @@ def sim_physics() -> None:
     physics.SetGravityZDirection(0)
 
 
-def insertion_settings() -> None:
+def insertion_settings(insert=True) -> None:
     """
     Set the insertion settings for the particles.
     """
@@ -375,8 +380,9 @@ def insertion_settings() -> None:
     particle_vol = (4 / 3) * np.pi * P_RADIUS**3  # m^3
 
     # 0.64 is an avg packing fraction of spherical particles
-    if INSERT_TYPE == "ins":
-        n_particles = np.rint(fill_box_vol * 0.64 / particle_vol).astype(int).item()
+    if insert:
+        # Use less particles to account for non-spherical shapes
+        n_particles = np.rint(fill_box_vol * 0.5 / particle_vol).astype(int).item()
 
         mass_particles = particle_vol * P_DENSITY * n_particles
         flowr = mass_particles / T_FILL  # kg/s
@@ -417,7 +423,7 @@ def move_top_wall():
     drop_wall_motion.SetType("Free Body Translation")
     free_body = drop_wall_motion.GetTypeObject()
     free_body.SetFreeMotionDirection("x")
-    drop_wall_motion.SetStartTime(0)
+    drop_wall_motion.SetStartTime(T_FILL + T_SETTLE)
 
     # Start compression
     # Account for wall mass
@@ -426,8 +432,8 @@ def move_top_wall():
     compr_motion.SetType("Additional Force")
     add_force = compr_motion.GetTypeObject()
     add_force.SetForceValue([pressure, 0, 0], "N")
-    compr_motion.SetStartTime(T_SETTLE)
-    compr_motion.SetStopTime(T_SETTLE + T_COMPRESSION)
+    compr_motion.SetStartTime(T_FILL+T_SETTLE)
+    compr_motion.SetStopTime(T_FILL + T_SETTLE + T_COMPRESSION)
 
     top_wall_frame.ApplyTo(top_wall)
 
@@ -497,7 +503,7 @@ def _select_processor(solver, processor: str) -> None:
         solver.SetNumberOfProcessors(NPROCS)
 
 
-def simulate(autotimestep: bool = True, timestep=None) -> None:
+def simulate(insert: bool=True, autotimestep: bool = True, timestep=None) -> None:
     """
     Starts simulation of the uniaxial compression test.
 
@@ -524,11 +530,11 @@ def simulate(autotimestep: bool = True, timestep=None) -> None:
             solver.SetUseFixedTimestep(True)
             solver.SetFixedTimestep(timestep, "s")
 
-    runtime = T_SETTLE + T_COMPRESSION
+    if insert:
+        runtime = T_FILL + T_SETTLE + T_COMPRESSION
+    else:
+        runtime = T_SETTLE + T_COMPRESSION
     solver.SetSimulationDuration(runtime, "s")
-
-    if INSERT_TYPE == "ins":
-        solver.SetReleaseParticlesWithoutOverlapCheck(True)
 
     project.SaveProject()
     print(f"Running simulation with {PROCESSOR} solver.")
@@ -576,6 +582,19 @@ def _calc_bulk_dens(particles, time_step, sample_frac=0.9) -> float:
 
     return sample_mass / sample_vol
 
+def load_modules():
+    """
+    Load the contacts data
+    and enable the intensity calculation.
+    This module is used to compute the power input for the shearing wall
+    """
+
+    global study
+
+    contacts_data = study.GetContactData()
+    contacts_data.EnableCollectContactsData()
+    if ADHESION_MODEL != "none":
+        contacts_data.EnableIncludeAdhesiveContacts()
 
 def post_process(plot: Optional[bool] = True) -> None:
     """
@@ -590,7 +609,7 @@ def post_process(plot: Optional[bool] = True) -> None:
 
     time_set = study.GetTimeSet()
     timeset_arr = time_set.GetValues()
-    settled_timestep = np.where(timeset_arr == T_SETTLE)[0][0].item()
+    settled_timestep = np.where(timeset_arr == (T_FILL+T_SETTLE))[0][0].item()
     particles = study.GetParticles()
 
     uncompr_dens = _calc_bulk_dens(particles, settled_timestep, 0.9)
@@ -602,8 +621,8 @@ def post_process(plot: Optional[bool] = True) -> None:
     bulk_dens = []
     if plot:
         PLOTS_DIR = os.path.join(PROJECT_DIR, "plots")
-        for timestep in np.nditer(time_set, flags=["refs_ok"]):
-            bulk_dens_ts = _calc_bulk_dens(particles, timestep.item(), sample_frac=0.9)
+        for timestep in time_set[1:]:
+            bulk_dens_ts = _calc_bulk_dens(particles, timestep, sample_frac=0.9)
             bulk_dens.append(bulk_dens_ts)
 
         bulk_dens_t = np.array(bulk_dens)
@@ -784,14 +803,17 @@ shape_dict = {
     "smoothness": {{SMOOTHNESS}},
 }
 
+
+INSERT = True
+
 setup()
-load_meshes()
+load_meshes(insert=True)
 load_material_properties()
 load_interactions()
 gen_particle(shape_dict)
 sim_physics()
-insertion_settings()
+insertion_settings(insert=True)
 set_domain_settings()
 move_top_wall()
-simulate()
+simulate(insert=True)
 post_process()

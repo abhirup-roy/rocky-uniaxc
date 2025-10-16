@@ -35,12 +35,31 @@ def _write_df_file(df: pd.DataFrame, name: str, filetype: str, s_dir: str):
         df.to_excel(os.path.join(s_dir, f"{name}.xlsx"))
 
 
-def dump_db(sweep_name: str, filetype: str = "csv", outputs_dir: str = "pyoutputs"):
+def dump_results(
+    sweep_name: str,
+    filetype: str = "csv",
+    outputs_dir: str = "pyoutputs",
+    minimal: bool = False,
+):
+    """
+    Dump the results DataFrame to a specified file format in the outputs directory.
+
+    Parameters
+    ----------
+    sweep_name : str
+        Name of the sweep directory containing the results database.
+    filetype : str, optional
+        The file format to dump the results. Options are 'csv', 'parquet', 'feather'.
+    outputs_dir : str, optional
+        The directory within the sweep directory to save the output files.
+    """
     outputs_dir_path = os.path.join(PWD, sweep_name, outputs_dir)
     if not os.path.isdir(outputs_dir):
         os.makedirs(outputs_dir_path, exist_ok=True)
 
-    df = load_data(sweep_name=sweep_name)
+    df = load_data(sweep_name=sweep_name).set_index("case_n").sort_index()
+    if minimal:
+        df = df.loc[:, df.nunique(dropna=True) > 1]
 
     _write_df_file(df=df, name="results", filetype=filetype, s_dir=outputs_dir_path)
     if filetype == "csv":
@@ -109,7 +128,20 @@ def find_faulty_runs(sweep_name: str, dump: bool = False):
             )
 
 
-def concat_csv(sweep_name: str, filetype: str = "csv", minimal: bool = False):
+def dump_results_backup(sweep_name: str, filetype: str = "csv", minimal: bool = False):
+    """
+    Fallback alternative to dump all results from individual case directories into a single file.
+    Uses results.csv files in each case directory and combines them into one DataFrame.
+
+    Parameters
+    ----------
+    sweep_name : str
+        Name of the sweep directory containing case subdirectories.
+    filetype : str, optional
+        The file format to dump the results. Options are 'csv', 'parquet', 'feather', 'excel'.
+    minimal : bool, optional
+        If True, only include columns with more than one unique value.
+    """
     sweep_dir = os.path.join(PWD, sweep_name)
     if not os.path.isdir(sweep_dir):
         raise NotADirectoryError(f"Sweep directory not found at {sweep_dir}")

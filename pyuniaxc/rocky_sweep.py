@@ -5,6 +5,19 @@ __author__ = "Abhirup Roy"
 __email__ = "axr154@bham.ac.uk"
 __status__ = "Development"
 
+import os
+import json
+import subprocess
+from collections import OrderedDict
+import itertools
+from typing import Optional
+
+import jinja2
+
+from .compr_meshgen import create_meshes_efficiently
+from .rocky_doe import launch_ofat
+from .utils import slurm_sbatch, cd
+
 """
 This script generates multiple cases for Rocky DEM simulations using a template and a set of parameters.
 It creates a directory for each case, populates the template with parameters, and generates the necessary mesh files.
@@ -24,20 +37,6 @@ Example usage:
         autolaunch=True
     )
 """
-
-import os
-import json
-import subprocess
-from collections import OrderedDict
-import itertools
-from pprint import pprint
-from typing import Optional
-
-import jinja2
-
-from .compr_meshgen import create_meshes_efficiently
-from .rocky_doe import launch_ofat
-from .utils import slurm_sbatch, cd
 
 
 def iter_params(json_path: str):
@@ -181,8 +180,6 @@ def make_cases(
     print("Generating scripts and preparing jobs...")
     for i, params in enumerate(all_params):
         case_dir = case_dirs[i]
-        box_size = params[11]
-
         print(params)
 
         # Prepare script context
@@ -255,7 +252,7 @@ def make_cases(
                     print(f"Error submitting job: {e.stderr}")
 
     print(f"All {total_cases} cases prepared and launched.")
-    print(f"Exiting launcher script now")
+    print("Exiting launcher script now")
 
 
 if __name__ == "__main__":

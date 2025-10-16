@@ -66,7 +66,7 @@ Rocky --script "script_uniax.py" --headless >> rocky.log
 
 set -e
 
-ml rocky/24.2.0
+ml rocky/25.2.0
 
 Rocky --script "script_uniax.py" --headless >> rocky.log
 

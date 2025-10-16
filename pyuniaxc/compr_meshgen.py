@@ -21,6 +21,7 @@ def create_particlebox(size, meshsize=0.001, gui=False):
 
     # Define the half-size of the cube
     half_size = size / 2
+    half_size *= 1.01  # Slightly larger to avoid precision issues
 
     # Define the points for the cube
     p1 = gmsh.model.geo.addPoint(-half_size, -half_size, -half_size, meshSize=meshsize)
