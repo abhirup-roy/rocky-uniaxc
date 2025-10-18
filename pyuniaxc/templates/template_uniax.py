@@ -4,7 +4,6 @@
 import sys
 import os
 import sqlite3
-import warnings
 from typing import Optional
 import importlib.util
 
@@ -807,13 +806,14 @@ shape_dict = {
 INSERT = True
 
 setup()
-load_meshes(insert=True)
+load_meshes(insert=INSERT)
 load_material_properties()
 load_interactions()
 gen_particle(shape_dict)
 sim_physics()
-insertion_settings(insert=True)
+insertion_settings(insert=INSERT)
 set_domain_settings()
 move_top_wall()
-simulate(insert=True)
+load_modules()
+simulate(insert=INSERT)
 post_process()
