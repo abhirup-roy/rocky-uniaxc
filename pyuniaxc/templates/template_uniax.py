@@ -88,7 +88,7 @@ T_SETTLE: float = 1  # s
 COMPR_PRESSURE: float = {{P_COMPRESS}}  # Pa
 T_COMPRESSION: float = 1  # s
 
-INSERT = True # If False, use volumetric inlet
+INSERT = True  # If False, use volumetric inlet
 
 # Solver settings
 NPROCS = os.environ.get("SLURM_CPUS_ON_NODE", 20)
@@ -179,13 +179,13 @@ def load_meshes(insert=True) -> None:
 
         global insert_inlet
         insert_inlet = study.ImportSurface(
-            insert_stl_path, import_scale=1., convert_yz=True
+            insert_stl_path, import_scale=1.0, convert_yz=True
         )[0]
 
         insert_inlet.SetName("Insert Inlet")
         insert_inlet.SetPivotPoint([0, 0, 0])
-        insert_inlet.SetOrientationFromAngles(rotation = [0, 0, -90])
-        insert_inlet.SetTranslation([0.45 * PARTICLE_BOX_LEN/2, 0, 0])
+        insert_inlet.SetOrientationFromAngles(rotation=[0, 0, -90])
+        insert_inlet.SetTranslation([0.45 * PARTICLE_BOX_LEN / 2, 0, 0])
         insert_inlet.SetInvertNormal(True)
 
 
@@ -431,7 +431,7 @@ def move_top_wall():
     compr_motion.SetType("Additional Force")
     add_force = compr_motion.GetTypeObject()
     add_force.SetForceValue([pressure, 0, 0], "N")
-    compr_motion.SetStartTime(T_FILL+T_SETTLE)
+    compr_motion.SetStartTime(T_FILL + T_SETTLE)
     compr_motion.SetStopTime(T_FILL + T_SETTLE + T_COMPRESSION)
 
     top_wall_frame.ApplyTo(top_wall)
@@ -502,7 +502,7 @@ def _select_processor(solver, processor: str) -> None:
         solver.SetNumberOfProcessors(NPROCS)
 
 
-def simulate(insert: bool=True, autotimestep: bool = True, timestep=None) -> None:
+def simulate(insert: bool = True, autotimestep: bool = True, timestep=None) -> None:
     """
     Starts simulation of the uniaxial compression test.
 
@@ -581,6 +581,7 @@ def _calc_bulk_dens(particles, time_step, sample_frac=0.9) -> float:
 
     return sample_mass / sample_vol
 
+
 def load_modules():
     """
     Load the contacts data
@@ -595,6 +596,7 @@ def load_modules():
     if ADHESION_MODEL != "none":
         contacts_data.EnableIncludeAdhesiveContacts()
 
+
 def post_process(plot: Optional[bool] = True) -> None:
     """
     Post-process the simulation results. Includes calculating bulk density,
@@ -608,7 +610,7 @@ def post_process(plot: Optional[bool] = True) -> None:
 
     time_set = study.GetTimeSet()
     timeset_arr = time_set.GetValues()
-    settled_timestep = np.where(timeset_arr == (T_FILL+T_SETTLE))[0][0].item()
+    settled_timestep = np.where(timeset_arr == (T_FILL + T_SETTLE))[0][0].item()
     particles = study.GetParticles()
 
     uncompr_dens = _calc_bulk_dens(particles, settled_timestep, 0.9)
