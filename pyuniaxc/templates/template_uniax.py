@@ -116,6 +116,10 @@ MESHDIR = os.path.abspath(f"../meshes_{PARTICLE_BOX_LEN}")
 _run_flag = True
 _resume_flag = False
 
+# Tracking created boxes
+active_boxes = {}
+active_euls = {}
+
 
 def setup(filename="uniaxial_compression.rocky") -> None:
     """
@@ -377,13 +381,12 @@ def insertion_settings(insert=True) -> None:
 
     fill_box_vol = PARTICLE_BOX_LEN**3  # m^3
     particle_vol = (4 / 3) * np.pi * P_RADIUS**3  # m^3
+    # 0.6 is an avg packing fraction of spherical particles
+    # Use less particles to account for non-spherical shapes
+    n_particles = np.rint(fill_box_vol * 0.5 / particle_vol).astype(int).item()
+    mass_particles = particle_vol * P_DENSITY * n_particles
 
-    # 0.64 is an avg packing fraction of spherical particles
     if insert:
-        # Use less particles to account for non-spherical shapes
-        n_particles = np.rint(fill_box_vol * 0.5 / particle_vol).astype(int).item()
-
-        mass_particles = particle_vol * P_DENSITY * n_particles
         flowr = mass_particles / T_FILL  # kg/s
 
         particle_inlet = study.CreateParticleInlet(insert_inlet, particle)
@@ -395,11 +398,6 @@ def insertion_settings(insert=True) -> None:
         particle_inlet.SetStopTime(T_FILL)
         particle_inlet.DisablePeriodic()
     else:
-        fill_box_vol = PARTICLE_BOX_LEN**3  # m^3
-        particle_vol = (4 / 3) * np.pi * P_RADIUS**3  # m^3
-        n_particles = fill_box_vol / particle_vol
-        mass_particles = particle_vol * P_DENSITY * n_particles
-
         study.CreateVolumetricInlet(
             particle=particle,
             name="Volumetric Inlet",
@@ -431,7 +429,7 @@ def move_top_wall():
     compr_motion.SetType("Additional Force")
     add_force = compr_motion.GetTypeObject()
     add_force.SetForceValue([pressure, 0, 0], "N")
-    compr_motion.SetStartTime(T_FILL + T_SETTLE)
+    compr_motion.SetStartTime(T_FILL + T_SETTLE + 0.1)
     compr_motion.SetStopTime(T_FILL + T_SETTLE + T_COMPRESSION)
 
     top_wall_frame.ApplyTo(top_wall)
@@ -545,43 +543,6 @@ def simulate(insert: bool = True, autotimestep: bool = True, timestep=None) -> N
     print("Simulation completed.")
 
 
-def _calc_bulk_dens(particles, time_step, sample_frac=0.9) -> float:
-    """
-    Calculates bulk density of particles at a given time step.
-    This takes the range of particles positions, takes a fraction of
-    the domain and calculates the bulk density based on the mass in
-    volume using rho = m / V.
-
-    **Parameters:**
-    - `particles`: The RAParticles object from the Rocky study.
-    - `time_step`: The time step at which to calculate the bulk density.
-    - `sample_frac`: Fraction of the domain length to sample for bulk density calculation.
-
-    **Returns:**
-    - `bulk_density`: The bulk density of the particles at the given time step.
-    """
-    x_coords = particles.GetGridFunction("Coordinate : X").GetArray(time_step=time_step)
-    y_coords = particles.GetGridFunction("Coordinate : Y").GetArray(time_step=time_step)
-    z_coords = particles.GetGridFunction("Coordinate : Z").GetArray(time_step=time_step)
-
-    positions = np.vstack((x_coords, y_coords, z_coords))
-    pos_rngs = np.ptp(positions, axis=1)
-    sample_rng = pos_rngs * sample_frac
-
-    processes = project.GetUserProcessCollection()
-    cube_selection = processes.CreateCubeProcess(particles)
-    cube_selection.SetCenter(x_coords.mean(), y_coords.mean(), z_coords.mean())
-    cube_selection.SetSize(sample_rng[0], sample_rng[1], sample_rng[2])
-
-    mass_arr = cube_selection.GetGridFunction("Particle Mass").GetArray(
-        time_step=time_step
-    )
-    sample_mass = mass_arr.sum()
-    sample_vol = sample_rng.prod()
-
-    return sample_mass / sample_vol
-
-
 def load_modules():
     """
     Load the contacts data
@@ -597,6 +558,128 @@ def load_modules():
         contacts_data.EnableIncludeAdhesiveContacts()
 
 
+def _get_cropped_region(particles, time_step, sample_frac=0.9):
+    if time_step in active_boxes:
+        return active_boxes[time_step]
+
+    x_coords = particles.GetGridFunction("Coordinate : X").GetArray(time_step=time_step)
+    y_coords = particles.GetGridFunction("Coordinate : Y").GetArray(time_step=time_step)
+    z_coords = particles.GetGridFunction("Coordinate : Z").GetArray(time_step=time_step)
+
+    positions = np.vstack((x_coords, y_coords, z_coords))
+    pos_rngs = np.ptp(positions, axis=1)
+    sample_rng = pos_rngs * sample_frac
+    processes = project.GetUserProcessCollection()
+    cube_selection = processes.CreateCubeProcess(particles)
+    cube_selection.SetCenter(x_coords.mean(), y_coords.mean(), z_coords.mean())
+    cube_selection.SetSize(sample_rng[0], sample_rng[1], sample_rng[2])
+
+    active_boxes[time_step] = cube_selection
+    return cube_selection
+
+
+def _calc_bulk_dens(particles, time_step, sample_frac=0.9) -> float:
+    """
+    Calculates bulk density of particles at a given time step.
+    This takes the range of particles positions, takes a fraction of
+    the domain and calculates the bulk density based on the mass in
+    volume using rho = m / V.
+
+    **Parameters:**
+    - `particles`: The RAParticles object from the Rocky study.
+    - `time_step`: The time step at which to calculate the bulk density.
+    - `sample_frac`: Fraction of the domain length to sample for bulk density calculation.
+
+    **Returns:**
+    - `bulk_density`: The bulk density of the particles at the given time step.
+    """
+    cube_selection = _get_cropped_region(particles, time_step, sample_frac)
+
+    mass_arr = cube_selection.GetGridFunction("Particle Mass").GetArray(
+        time_step=time_step
+    )
+    sample_mass = mass_arr.sum()
+
+    sample_rng = cube_selection.GetSize()
+    sample_vol = np.prod(sample_rng)
+
+    return sample_mass / sample_vol
+
+
+def _calc_contact_no(particles, time_step, sample_frac: float = 0.9) -> float:
+    cube_selection = _get_cropped_region(particles, time_step, sample_frac=sample_frac)
+    contact_data = study.GetContactData()
+
+    all_contacts_x = contact_data.GetGridFunction("Contact : Coordinate : X").GetArray(
+        time_step=time_step
+    )
+    all_contacts_y = contact_data.GetGridFunction("Contact : Coordinate : Y").GetArray(
+        time_step=time_step
+    )
+    all_contacts_z = contact_data.GetGridFunction("Contact : Coordinate : Z").GetArray(
+        time_step=time_step
+    )
+
+    x_rng, y_rng, z_rng = cube_selection.GetSize()
+    x_center, y_center, z_center = cube_selection.GetCenter()
+
+    x_mask = (all_contacts_x >= x_center - x_rng / 2) & (
+        all_contacts_x <= x_center + x_rng / 2
+    )
+    y_mask = (all_contacts_y >= y_center - y_rng / 2) & (
+        all_contacts_y <= y_center + y_rng / 2
+    )
+    z_mask = (all_contacts_z >= z_center - z_rng / 2) & (
+        all_contacts_z <= z_center + z_rng / 2
+    )
+
+    n_contacts = (
+        np.logical_and.reduce((x_mask, y_mask, z_mask)).sum()
+        * 2
+        / cube_selection.GetNumberOfParticles(time_step=time_step)
+    )
+    return n_contacts
+
+
+def _calc_shear_strength(particles, time_step, sample_frac=0.9) -> float:
+    cube_selection = _get_cropped_region(particles, time_step, sample_frac)
+
+    if time_step in active_euls.keys():
+        eul_region = active_euls[time_step]
+    else:
+        processes = project.GetUserProcessCollection()
+        eul_region = processes.CreateEulerianStatistics(cube_selection)
+        eul_region.SetDivisions([1, 1, 1])
+        active_euls[time_step] = eul_region
+
+    stress_mat = []
+    for comp in [["XX", "XY", "XZ"], ["XY", "YY", "YZ"], ["XZ", "YZ", "ZZ"]]:
+        stress_mat.append(
+            [
+                eul_region.GetGridFunction(f"Stress Component {comp[0]}").GetArray(
+                    time_step=time_step
+                )[0],
+                eul_region.GetGridFunction(f"Stress Component {comp[1]}").GetArray(
+                    time_step=time_step
+                )[0],
+                eul_region.GetGridFunction(f"Stress Component {comp[2]}").GetArray(
+                    time_step=time_step
+                )[0],
+            ]
+        )
+
+    stress_mat = np.array(stress_mat)
+    evals, _ = np.linalg.eigh(stress_mat)
+    idx = evals.argsort()[::-1]
+    princ_stresses = evals[idx]
+
+    sig1, sig2, sig3 = princ_stresses
+    mean_stress = (sig1 + sig2 + sig3) / 3
+    dev_stress = (sig1 - sig3) / 3
+
+    return mean_stress, dev_stress
+
+
 def post_process(plot: Optional[bool] = True) -> None:
     """
     Post-process the simulation results. Includes calculating bulk density,
@@ -606,46 +689,105 @@ def post_process(plot: Optional[bool] = True) -> None:
     **Parameters:**
     - `plot` (bool): If True, generates plots of bulk density and voidage over time.
     """
-    global study, project
+    global study, project, particle
 
     time_set = study.GetTimeSet()
     timeset_arr = time_set.GetValues()
     settled_timestep = np.where(timeset_arr == (T_FILL + T_SETTLE))[0][0].item()
     particles = study.GetParticles()
 
+    # Calculate bulk densities
     uncompr_dens = _calc_bulk_dens(particles, settled_timestep, 0.9)
     compr_dens = _calc_bulk_dens(particles, -1, 0.9)
-
     hausner_ratio = compr_dens / uncompr_dens
     compr_idx = 100 * (compr_dens - uncompr_dens) / compr_dens
 
+    # Calculate contact numbers
+    uncompr_contacts = _calc_contact_no(particles, settled_timestep, 0.9)
+    compr_contacts = _calc_contact_no(particles, -1, 0.9)
+    contacts_ratio = compr_contacts / uncompr_contacts
+
+    # Caclulate shear strengths
+    uncompr_mean_stress, uncompr_dev_stress = _calc_shear_strength(
+        particles, settled_timestep, 0.9
+    )
+    compr_mean_stress, compr_dev_stress = _calc_shear_strength(particles, -1, 0.9)
+    uncompr_shear_strength = uncompr_mean_stress / uncompr_dev_stress
+    compr_shear_strength = compr_mean_stress / compr_dev_stress
+
     bulk_dens = []
+    contacts = []
+    mean_stresses = []
+    dev_stresses = []
+
     if plot:
         PLOTS_DIR = os.path.join(PROJECT_DIR, "plots")
         for timestep in time_set[1:]:
             bulk_dens_ts = _calc_bulk_dens(particles, timestep, sample_frac=0.9)
             bulk_dens.append(bulk_dens_ts)
+            contact_ts = _calc_contact_no(particles, timestep, sample_frac=0.9)
+            contacts.append(contact_ts)
+            mean_stress_ts, dev_stress_ts = _calc_shear_strength(
+                particles, timestep, sample_frac=0.9
+            )
+            mean_stresses.append(mean_stress_ts)
+            dev_stresses.append(dev_stress_ts)
 
+        # Plot bulk dens
         bulk_dens_t = np.array(bulk_dens)
-
         fig, ax = plt.subplots(figsize=(10, 6))
         color = "tab:blue"
         ax.set_xlabel("Time (s)")
         ax.set_ylabel("Bulk Density (kg/m³)", color=color)
-        ax.plot(timeset_arr, bulk_dens_t, color=color)
+        ax.plot(timeset_arr[1:], bulk_dens_t, color=color)
         ax.tick_params(axis="y", labelcolor=color)
 
         ax.set_title("Bulk Density vs Time")
         ax.grid(True, alpha=0.3)
 
         fig.tight_layout()
-        fig.savefig(os.path.join(PLOTS_DIR, "bulk_density_voidage.png"), dpi=300)
+        fig.savefig(os.path.join(PLOTS_DIR, "bulk_density.png"), dpi=300)
+        plt.close(fig)
+
+        # Plot contact no
+        fig, ax = plt.subplots(figsize=(10, 6))
+        color = "tab:orange"
+        ax.set_xlabel("Time (s)")
+        ax.set_ylabel("Average Contacts per Particle", color=color)
+        ax.plot(timeset_arr[1:], contacts, color=color)
+        ax.tick_params(axis="y", labelcolor=color)
+        ax.set_title("Average Contacts per Particle vs Time")
+        ax.grid(True, alpha=0.3)
+        fig.tight_layout()
+        fig.savefig(os.path.join(PLOTS_DIR, "contact_no.png"), dpi=300)
+        plt.close(fig)
+
+        # Plot mean and deviatoric stresses
+        mean_stresses_t = np.array(mean_stresses)
+        dev_stresses_t = np.array(dev_stresses)
+        fig, ax = plt.subplots(figsize=(10, 6))
+        color = "tab:green"
+        ax.set_xlabel("Time (s)")
+        ax.set_ylabel("Mean Stress (Pa)", color=color)
+        ax.plot(timeset_arr[1:], mean_stresses_t, color=color, label="Mean Stress")
+        ax.tick_params(axis="y", labelcolor=color)
+        ax2 = ax.twinx()
+        color = "tab:red"
+        ax2.set_ylabel("Deviatoric Stress (Pa)", color=color)
+        ax2.plot(
+            timeset_arr[1:], dev_stresses_t, color=color, label="Deviatoric Stress"
+        )
+        ax2.tick_params(axis="y", labelcolor=color)
+        ax.set_title("Mean and Deviatoric Stresses vs Time")
+        ax.grid(True, alpha=0.3)
+        fig.tight_layout()
+        fig.savefig(os.path.join(PLOTS_DIR, "stresses.png"), dpi=300)
+        plt.close(fig)
 
     case_num = int(os.path.basename(PROJECT_DIR).split("_")[-1])
     n_particles = int(particles.GetNumberOfParticles(0))
     particles_lost = int(n_particles - particles.GetNumberOfParticles(-1))
 
-    global particle
     shape_name = particle.GetShape()
     vert_ar = particle.GetVerticalAspectRatio()
     horiz_ar = particle.GetHorizontalAspectRatio()
@@ -684,6 +826,13 @@ def post_process(plot: Optional[bool] = True) -> None:
         hausner_ratio,
         compr_idx,
         particles_lost,
+        uncompr_contacts,
+        compr_contacts,
+        contacts_ratio,
+        uncompr_mean_stress,
+        compr_mean_stress,
+        uncompr_dev_stress,
+        compr_dev_stress,
     ]
 
     col_names = [
@@ -717,6 +866,9 @@ def post_process(plot: Optional[bool] = True) -> None:
         "hausner_ratio",
         "compression_index",
         "n_lost",
+        "uncompr_contacts",
+        "compr_contacts",
+        "contacts_ratio",
     ]
 
     assert len(col_vals) == len(col_names), (
@@ -768,6 +920,13 @@ def post_process(plot: Optional[bool] = True) -> None:
             hausner_ratio REAL,
             compression_index REAL,
             n_lost INTEGER
+            n_uncompr_contacts REAL,
+            n_compr_contacts REAL,
+            contacts_ratio REAL,
+            uncompr_mean_stress REAL,
+            compr_mean_stress REAL,
+            uncompr_dev_stress REAL,
+            compr_dev_stress REAL
         )"""
         insert_query = f"""INSERT INTO results (
             case_n, p_radius, p_density, p_youngmod, p_poisson,
@@ -777,7 +936,9 @@ def post_process(plot: Optional[bool] = True) -> None:
             normal_force_model, tangential_force_model, adhesion_model,
             rolling_model, box_len, n_particles, shape_name, vert_ar, horiz_ar, n_corners,
             sq_degree, smoothness, bulk_density, compressed_density,
-            hausner_ratio, compression_index, n_lost
+            hausner_ratio, compression_index, n_lost, n_uncompr_contacts,
+            n_compr_contacts, contacts_ratio, uncompr_mean_stress, compr_mean_stress,
+            uncompr_dev_stress, compr_dev_stress
         ) VALUES ({",".join(["?"] * len(col_vals))})
         """
 
