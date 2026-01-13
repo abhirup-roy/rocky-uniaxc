@@ -5,7 +5,6 @@ from warnings import warn
 import numpy as np
 from stl import mesh
 from evtk import vtk, hl
-from .utils import cd
 import ansys.rocky.core as pyrocky
 
 
@@ -62,14 +61,14 @@ def _export_particle_stl(rocky_file: str) -> str:
     write_path = os.path.join(rocky_dir, "export_particle_stl.py")
     with open(write_path, "w") as f:
         f.write(script)
-    
+
     cmd = ["Rocky", "--script", write_path, "--headless"]
     subprocess.run(cmd, cwd=rocky_dir)
     stl_path = os.path.join(tempdir, "particle.stl")
 
     if not os.path.exists(stl_path):
         raise FileNotFoundError(f"Failed to export particle STL to {stl_path}")
-    
+
     return stl_path
 
 
@@ -211,14 +210,12 @@ def generate_vtk(
     if not rocky_exe:
         rocky_exe = subprocess.run(["which", "Rocky"], capture_output=True)
         rocky_exe = rocky_exe.stdout.decode().strip()
-    
-    os.makedirs(output_dir, exist_ok=True)
 
+    os.makedirs(output_dir, exist_ok=True)
 
     tempdir = os.path.join(os.getcwd(), "pyrocky_temp")
     os.makedirs(tempdir, exist_ok=True)
     rocky = pyrocky.launch_rocky(rocky_exe=rocky_exe)
-
 
     if isinstance(rocky_filepath, str):
         rocky_filepath = [rocky_filepath]
@@ -227,10 +224,11 @@ def generate_vtk(
 
     if len(rocky_filepath) != len(output_dir):
         raise ValueError("rocky_filepath and output_dir must have the same length.")
-    
+
     print(rocky_filepath)
     particle_paths = [
-        _export_particle_stl(os.path.join(os.getcwd(),f)) for f in rocky_filepath]
+        _export_particle_stl(os.path.join(os.getcwd(), f)) for f in rocky_filepath
+    ]
 
     for i, rocky_file in enumerate(rocky_filepath):
         if not os.path.isfile(rocky_file):

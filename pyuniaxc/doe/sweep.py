@@ -14,9 +14,9 @@ from typing import Optional
 
 import jinja2
 
-from .compr_meshgen import create_meshes_efficiently
-from .rocky_doe import launch_ofat
-from .utils import slurm_sbatch, cd
+from ..compr_meshgen import create_meshes_efficiently
+from .ofat import launch_ofat
+from ..utils import slurm_sbatch, cd
 
 """
 This script generates multiple cases for Rocky DEM simulations using a template and a set of parameters.
@@ -69,9 +69,7 @@ def iter_params(json_path: str):
         vert_ars.append(shape.get("vert_ar", 1.0))
         horiz_ars.append(shape.get("horiz_ar", 1.0))
         n_corners_list.append(shape.get("n_corners", 6))
-        sq_degrees.append(
-            shape.get("sq_degrees", 1.0)
-        )  # Note: using 'sq_degrees' to match JSON
+        sq_degrees.append(shape.get("sq_degree", 1.0))
         particle_paths.append(shape.get("particle_path", ""))
 
     # Find all combinations of parameters
@@ -98,7 +96,7 @@ def iter_params(json_path: str):
     return param_combinations
 
 
-def make_cases(
+def launch_sweep(
     sweep_name: str,
     meshdir: str = "meshes",
     json_path: str = "params.json",

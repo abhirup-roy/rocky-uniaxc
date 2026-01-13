@@ -10,8 +10,8 @@ import numpy as np
 import pandas as pd
 import jinja2
 
-from .compr_meshgen import create_meshes_efficiently
-from .utils import slurm_sbatch, cd
+from ..compr_meshgen import create_meshes_efficiently
+from ..utils import slurm_sbatch, cd
 
 
 def iter_ofat(json_path: str, ofat_values: dict[str, list | str], n_points: int):
@@ -334,8 +334,13 @@ def launch_ofat(
 
         # Create SLURM script
         slurm_sbatch(
-            case_dir, loc=loc, autolaunch=False, custom_msg=custom_sh, ncpus=ncpus,
-            ngpus=ngpus, run_days=run_days
+            case_dir,
+            loc=loc,
+            autolaunch=False,
+            custom_msg=custom_sh,
+            ncpus=ncpus,
+            ngpus=ngpus,
+            run_days=run_days,
         )  # Don't launch yet
 
     # Launch all cases at once if requested
