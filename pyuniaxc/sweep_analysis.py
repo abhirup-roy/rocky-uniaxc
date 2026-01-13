@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import re
 import glob
+import shutil
+import re
 import os
 import sqlite3
+import subprocess
 import matplotlib.pyplot as plt
 import pandas as pd
+from .utils import cd
 
 PWD = os.getcwd()
 
@@ -166,3 +169,110 @@ def dump_results_backup(sweep_name: str, filetype: str = "csv", minimal: bool = 
         all_df = all_df.loc[:, all_df.nunique(dropna=True) > 1]
 
     _write_df_file(all_df, name="all_results", filetype=filetype, s_dir=sweep_dir)
+
+def _insert_line_in_file(file_path: str, match_str: str, new_line: str):
+    """
+    Reads a file, finds the line containing match_str, and inserts new_line 
+    below it with the same indentation.
+    Parameters
+    ----------
+    file_path : str
+        Path to the file to modify.
+    match_str : str
+        The string to search for in the file.
+    new_line : str
+        The line to insert below the matched line.
+    """
+    with open(file_path, "r") as f:
+        lines = f.readlines()
+
+    modified = False
+    with open(file_path, "w") as f:
+        for line in lines:
+            f.write(line)
+            if match_str in line:
+                # Capture indentation (leading whitespace)
+                indent = line[: len(line) - len(line.lstrip())]
+                f.write(f"{indent}{new_line}\n")
+                modified = True
+    
+    if not modified:
+        print(f"Warning: Could not find match '{match_str}' in {file_path}")
+    else:
+        print(f"Successfully modified {file_path}")
+
+def repeat_sweep(sweep_name:str, n_repeats: int, autolaunch: bool = True):
+    """
+    Repeat the sweep by duplicating existing case directories 
+    with new case numbers.
+    """
+    # Resolve absolute path to handle trailing slashes and relative paths correctly
+    sweep_path = os.path.abspath(sweep_name)
+    parent_dir = os.path.dirname(sweep_path)
+    base_name = os.path.basename(sweep_path)
+
+    if not os.path.isdir(sweep_path):
+        raise NotADirectoryError(f"Sweep directory not found at {sweep_path}")
+
+    current_repeat = 0
+    while current_repeat < n_repeats:
+
+        # Construct new path using the parent directory and clean base name
+        new_dir = os.path.join(parent_dir, f"{base_name}_repeat_{current_repeat+1}")
+        
+        # Copy files
+        if os.path.exists(new_dir):
+            shutil.rmtree(new_dir)
+        shutil.copytree(sweep_path, new_dir)
+        
+        current_repeat += 1
+        
+        # Delete simulation files for all cases in the new sweep
+        rocky_files = glob.glob(
+            os.path.join(new_dir, "case_*", "*.rocky*")
+        )
+        slurm_files = glob.glob(
+            os.path.join(new_dir, "case_*", "slurm-*.out")
+        )
+        log_files = glob.glob(
+            os.path.join(new_dir, "case_*", "*.log")
+        )
+
+        for f in rocky_files + slurm_files + log_files:
+            if os.path.isfile(f):
+                os.remove(f)
+            elif os.path.isdir(f):
+                shutil.rmtree(f)
+        
+        py_scripts = glob.glob(
+            os.path.join(new_dir, "case_*", "script_uniax.py")
+        )
+
+        if not py_scripts:
+            print(f"Warning: No script_uniax.py files found in {new_dir}")
+
+        for script in py_scripts:
+            _insert_line_in_file(
+                file_path=script,
+                match_str="# Instantiate the shape for the particle",
+                new_line="particle.EnableRandomOrientation()",
+            )
+        
+        if autolaunch:
+
+            cases = glob.glob(os.path.join(new_dir, "case_*"))
+            for case in cases:
+                with cd(case):
+
+                    # Launch with sbatch
+                    output = subprocess.run(
+                        ["sbatch", "runRocky.sh"],
+                        capture_output=True,
+                        text=True,
+                    )
+                    if output.returncode == 0:
+                        print(f"Launched simulation in {case}: {output.stdout.strip()}")
+                    else:
+                        print(f"Error launching simulation in {case}: {output.stderr.strip()}")
+
+    print(f"Sweep '{sweep_name}' repeated {n_repeats} times.")

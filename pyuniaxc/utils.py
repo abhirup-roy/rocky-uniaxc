@@ -22,8 +22,11 @@ def slurm_sbatch(
     autolaunch: bool = False,
     custom_msg: str = None,
     ncpus: int = None,
+    ngpus: int = 1,
+    run_days: int = 12
 ):
-    """Create a slurm sbatch script for each case.
+    """
+    Create a slurm sbatch script for each case.
     Change if needed.
     """
 
@@ -40,7 +43,7 @@ def slurm_sbatch(
 #SBATCH --ntasks={ncpus}
 #SBATCH --cpus-per-task=1
 #SBATCH --nodes=1
-#SBATCH --time=5-0
+#SBATCH --time={run_days}-0
 #SBATCH --qos=bbdefault
 #SBATCH --mail-type=ALL
 #SBATCH --account=windowcr-astrazeneca-abhi
@@ -56,11 +59,11 @@ Rocky --script "script_uniax.py" --headless >> rocky.log
 
     # For AZ SCP use
     elif loc == "az-gpu":
-        template = """#!/bin/sh
+        template = f"""#!/bin/sh
 #SBATCH --job-name=uniaxc
 #SBATCH --ntasks=1
-#SBATCH --time=5-0
-#SBATCH --gres=gpu:1
+#SBATCH --time={run_days}-0
+#SBATCH --gres=gpu:{ngpus}
 #SBATCH --cpus-per-gpu=1
 #SBATCH -p gpu
 

@@ -919,7 +919,7 @@ def post_process(plot: Optional[bool] = True) -> None:
             compressed_density REAL,
             hausner_ratio REAL,
             compression_index REAL,
-            n_lost INTEGER
+            n_lost INTEGER,
             n_uncompr_contacts REAL,
             n_compr_contacts REAL,
             contacts_ratio REAL,

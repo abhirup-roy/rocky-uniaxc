@@ -207,6 +207,8 @@ def launch_ofat(
     target: str = "CPU",
     n_points: int = 10,
     ncpus: int = None,
+    ngpus: int = 1,
+    run_days: int = 10,
     **kwargs,
 ):
     custom_sh = kwargs.get("custom_sh")
@@ -332,7 +334,8 @@ def launch_ofat(
 
         # Create SLURM script
         slurm_sbatch(
-            case_dir, loc=loc, autolaunch=False, custom_msg=custom_sh, ncpus=ncpus
+            case_dir, loc=loc, autolaunch=False, custom_msg=custom_sh, ncpus=ncpus,
+            ngpus=ngpus, run_days=run_days
         )  # Don't launch yet
 
     # Launch all cases at once if requested

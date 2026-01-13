@@ -14,3 +14,4 @@ __all__ = ["launch_sweep", "launch_ofat", "analyse"]
 from .rocky_sweep import make_cases as launch_sweep
 from .rocky_doe import launch_ofat
 from . import sweep_analysis as analyse
+from . import externals

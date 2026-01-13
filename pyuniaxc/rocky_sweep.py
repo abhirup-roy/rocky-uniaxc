@@ -52,6 +52,8 @@ def iter_params(json_path: str):
 
     # Handle shape parameters - now it's an array of shape objects
     shape_list = params["shape"]
+    if not isinstance(shape_list, list):
+        shape_list = [shape_list]
 
     # Extract all possible values for each shape parameter
     shape_names = []
@@ -62,6 +64,7 @@ def iter_params(json_path: str):
     particle_paths = []
 
     for shape in shape_list:
+        print(shape)
         shape_names.append(shape.get("name", "sphere"))
         vert_ars.append(shape.get("vert_ar", 1.0))
         horiz_ars.append(shape.get("horiz_ar", 1.0))
