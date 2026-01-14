@@ -74,6 +74,18 @@ ml rocky/25.2.0
 Rocky --script "script_uniax.py" --headless >> rocky.log
 
     """
+
+    elif loc == "bb-gpu":
+        template = f"""#!/bin/bash
+#SBATCH --job-name=uniaxc
+#SBATCH --ntasks=1
+#SBATCH --time={run_days}-0
+#SBATCH --gres=gpu:{ngpus}
+#SBATCH --qos=bbgpu
+#SBATCH --account=windowcr-astrazeneca-abhi
+#SBATCH --gres=gpu:1
+
+    """
     elif loc == "custom":
         if custom_msg and custom_msg.startswith("#!/bin/bash"):
             template = custom_msg
@@ -81,7 +93,10 @@ Rocky --script "script_uniax.py" --headless >> rocky.log
             raise ValueError("Invalid custom message provided")
 
     else:
-        raise ValueError("Only")
+        raise ValueError(
+            "Only 'bb-cpu', 'bb-gpu', 'az-gpu' and 'custom' locations are supported"
+            f" but got '{loc}'"
+        )
     # Write the sbatch script to a file
     write_path = os.path.join(case_dir, "runRocky.sh")
 
