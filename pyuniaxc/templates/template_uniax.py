@@ -3,6 +3,7 @@
 
 import sys
 import os
+import pathlib
 import sqlite3
 from typing import Optional
 import importlib.util
@@ -13,7 +14,8 @@ import matplotlib.pyplot as plt
 
 # Import particle shapes using importlib
 shapes_spec = importlib.util.spec_from_file_location(
-    "particles_shapes", os.path.abspath("../../../particles_shapes.py")
+    "particles_shapes",
+    pathlib.Path.cwd().parent.parent.parent / "particles_shapes.py",
 )
 if not shapes_spec:
     raise ImportError("Could not find the particles_shapes.py file.")
@@ -105,8 +107,8 @@ PROCESSOR: str = {{XPU}}
 assert PROCESSOR in ["CPU", "GPU", "MULTI_GPU"]
 
 # Paths
-PROJECT_DIR = os.getcwd()
-MESHDIR = os.path.abspath(f"../meshes_{PARTICLE_BOX_LEN}")
+PROJECT_DIR = pathlib.Path.cwd()
+MESHDIR = pathlib.Path.cwd().parent / "meshes_{{L_BOX}}"
 
 # Paths to the Rocky executable - for PyRocky implementation
 # BB_ROCKY_PATH = '/rds/bear-apps/2023a/EL8-ice/software/ANSYS_Rocky/2024R2.0/bin/Rocky'
@@ -131,8 +133,9 @@ def setup(filename="uniaxial_compression.rocky") -> None:
     global project, study
 
     # Create Rocky file
-    rocky_path = os.path.join(PROJECT_DIR, filename)
-    if os.path.exists(rocky_path):
+    rocky_path = PROJECT_DIR / filename
+
+    if rocky_path.exists():
         project = app.OpenProject(rocky_path)
         study = project.GetStudy()
         _run_flag = False
@@ -157,8 +160,8 @@ def load_meshes(insert=True) -> None:
 
     global top_wall, bottom_wall, study
 
-    compr_wall1_stl_path = os.path.join(MESHDIR, "compressive_wall1.stl")
-    compr_wall2_stl_path = os.path.join(MESHDIR, "compressive_wall2.stl")
+    compr_wall1_stl_path = MESHDIR / "compressive_wall1.stl"
+    compr_wall2_stl_path = MESHDIR / "compressive_wall2.stl"
 
     # Load Top Wall
     top_wall = study.ImportWall(
@@ -179,7 +182,7 @@ def load_meshes(insert=True) -> None:
     bottom_wall.SetTranslation([PARTICLE_BOX_LEN / 2 + 1e-6, 0, 0])
 
     if insert:
-        insert_stl_path = os.path.join(MESHDIR, "insert.stl")
+        insert_stl_path = MESHDIR / "insert.stl"
 
         global insert_inlet
         insert_inlet = study.ImportSurface(
@@ -334,7 +337,7 @@ def gen_particle(shape_dict: dict[str, float | str]) -> None:
             )
         case "custom_polyhedron":
             stl_path = str(shape_dict.get("particle_path", ""))
-            if not stl_path or not os.path.exists(stl_path):
+            if not stl_path or not pathlib.Path(stl_path).resolve().is_file():
                 raise ValueError("Custom polyhedron requires a valid STL file path.")
 
             shape_obj = particle_shapes.CustomPolyhedron(
@@ -829,10 +832,6 @@ def post_process(plot: Optional[bool] = True) -> None:
         uncompr_contacts,
         compr_contacts,
         contacts_ratio,
-        uncompr_mean_stress,
-        compr_mean_stress,
-        uncompr_dev_stress,
-        compr_dev_stress,
     ]
 
     col_names = [
@@ -922,11 +921,7 @@ def post_process(plot: Optional[bool] = True) -> None:
             n_lost INTEGER,
             n_uncompr_contacts REAL,
             n_compr_contacts REAL,
-            contacts_ratio REAL,
-            uncompr_mean_stress REAL,
-            compr_mean_stress REAL,
-            uncompr_dev_stress REAL,
-            compr_dev_stress REAL
+            contacts_ratio REAL
         )"""
         insert_query = f"""INSERT INTO results (
             case_n, p_radius, p_density, p_youngmod, p_poisson,
@@ -937,8 +932,7 @@ def post_process(plot: Optional[bool] = True) -> None:
             rolling_model, box_len, n_particles, shape_name, vert_ar, horiz_ar, n_corners,
             sq_degree, smoothness, bulk_density, compressed_density,
             hausner_ratio, compression_index, n_lost, n_uncompr_contacts,
-            n_compr_contacts, contacts_ratio, uncompr_mean_stress, compr_mean_stress,
-            uncompr_dev_stress, compr_dev_stress
+            n_compr_contacts, contacts_ratio
         ) VALUES ({",".join(["?"] * len(col_vals))})
         """
 
