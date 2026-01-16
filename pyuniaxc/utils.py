@@ -1,4 +1,5 @@
 import os
+import pathlib
 import subprocess
 
 
@@ -51,8 +52,8 @@ def slurm_sbatch(
 set -e
 
 module purge; module load bluebear
-module load bear-apps/2023a
-module load ANSYS_Rocky/2024R2.0
+module load bear-apps/2024a
+module load ANSYS_Rocky/2025R2
 
 Rocky --script "script_uniax.py" --headless >> rocky.log
     """
@@ -85,6 +86,13 @@ Rocky --script "script_uniax.py" --headless >> rocky.log
 #SBATCH --account=windowcr-astrazeneca-abhi
 #SBATCH --gres=gpu:1
 
+set -e
+
+module purge; module load bluebear
+module load bear-apps/2024a
+module load ANSYS_Rocky/2025R2
+
+Rocky --script "script_uniax.py" --headless >> rocky.log
     """
     elif loc == "custom":
         if custom_msg and custom_msg.startswith("#!/bin/bash"):
@@ -98,7 +106,7 @@ Rocky --script "script_uniax.py" --headless >> rocky.log
             f" but got '{loc}'"
         )
     # Write the sbatch script to a file
-    write_path = os.path.join(case_dir, "runRocky.sh")
+    write_path = case_dir / "runRocky.sh"
 
     #  Create the sbatch script in sweeping directory
     with open(write_path, "w") as sbatch_file:

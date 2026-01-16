@@ -14,8 +14,9 @@ from typing import Optional
 
 import jinja2
 
-from ..compr_meshgen import create_meshes_efficiently
 from .ofat import launch_ofat
+from . import _tqdm_launch
+from ..compr_meshgen import create_meshes_efficiently
 from ..utils import slurm_sbatch, cd
 
 """
@@ -236,24 +237,7 @@ def launch_sweep(
 
     # Launch all cases at once if requested
     if autolaunch:
-        print("Launching all cases...")
-        for i, case_dir in enumerate(case_dirs):
-            print(f"Launching case {i}/{total_cases}...")
-            # Use subprocess to launch in the background
-            with cd(case_dir):
-                try:
-                    result = subprocess.run(
-                        ["sbatch", "runRocky.sh"],
-                        check=True,
-                        capture_output=True,
-                        text=True,
-                    )
-                    print(f"Job submitted: {result.stdout.strip()}")
-                except subprocess.CalledProcessError as e:
-                    print(f"Error submitting job: {e.stderr}")
-
-    print(f"All {total_cases} cases prepared and launched.")
-    print("Exiting launcher script now")
+        _tqdm_launch(case_dirs, total_cases)
 
 
 if __name__ == "__main__":

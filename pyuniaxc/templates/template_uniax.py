@@ -134,9 +134,10 @@ def setup(filename="uniaxial_compression.rocky") -> None:
 
     # Create Rocky file
     rocky_path = PROJECT_DIR / filename
+    rocky_path_str = str(rocky_path.resolve())
 
     if rocky_path.exists():
-        project = app.OpenProject(rocky_path)
+        project = app.OpenProject(rocky_path_str)
         study = project.GetStudy()
         _run_flag = False
         if study.CanResumeSimulation():
@@ -144,7 +145,7 @@ def setup(filename="uniaxial_compression.rocky") -> None:
             _resume_flag = True
     else:
         project = app.CreateProject()
-        project.SaveProject(rocky_path)
+        project.SaveProject(rocky_path_str)
         study = project.GetStudy()
         study.SetName("Uniaxial Compression")
         _run_flag = True
@@ -160,8 +161,8 @@ def load_meshes(insert=True) -> None:
 
     global top_wall, bottom_wall, study
 
-    compr_wall1_stl_path = MESHDIR / "compressive_wall1.stl"
-    compr_wall2_stl_path = MESHDIR / "compressive_wall2.stl"
+    compr_wall1_stl_path = str(MESHDIR / "compressive_wall1.stl")
+    compr_wall2_stl_path = str(MESHDIR / "compressive_wall2.stl")
 
     # Load Top Wall
     top_wall = study.ImportWall(
@@ -182,8 +183,7 @@ def load_meshes(insert=True) -> None:
     bottom_wall.SetTranslation([PARTICLE_BOX_LEN / 2 + 1e-6, 0, 0])
 
     if insert:
-        insert_stl_path = MESHDIR / "insert.stl"
-
+        insert_stl_path = str(MESHDIR / "insert.stl")
         global insert_inlet
         insert_inlet = study.ImportSurface(
             insert_stl_path, import_scale=1.0, convert_yz=True

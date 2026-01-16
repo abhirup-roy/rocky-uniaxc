@@ -1,6 +1,7 @@
 import json
 import inspect
 import os
+import pathlib
 import subprocess
 from collections import OrderedDict
 import pandas as pd
@@ -9,6 +10,9 @@ from typing import Callable, Optional
 from scipy.stats import qmc
 import numpy as np
 import jinja2
+from sklearn.preprocessing import MinMaxScaler
+
+from . import _tqdm_launch
 from ..utils import slurm_sbatch, cd
 from ..compr_meshgen import create_meshes_efficiently
 
@@ -320,6 +324,11 @@ def iter_sobol(
         samples_unit = sampler.random(n=np.log2(min_N).ceil().astype(int))
 
         # Scale samples to the specified ranges
+        l_bounds = []
+        u_bounds = []
+        for lb, ub in sobol_values["test_range"]:
+            l_bounds.append(lb)
+            u_bounds.append(ub)
         l_bounds = [r[0] for r in sobol_values["test_range"]]
         u_bounds = [r[1] for r in sobol_values["test_range"]]
         samples = qmc.scale(samples_unit, l_bounds, u_bounds)
@@ -347,10 +356,11 @@ def launch_sobol(
 ):
     custom_sh = kwargs.get("custom_sh")
     if not (template_dir := kwargs.get("template_dir")):
-        template_dir = os.path.join(os.path.dirname(__file__), "templates")
+        template_dir = pathlib.Path(__file__).parent.parent / "templates"
     else:
-        template_dir = os.path.abspath(template_dir)
-    if not os.path.exists(template_dir):
+        template_dir = pathlib.Path(template_dir).resolve()
+
+    if not template_dir.exists():
         raise FileNotFoundError(f"Directory {template_dir} does not exist.")
 
     target = target.upper()
@@ -385,11 +395,13 @@ def launch_sobol(
         all_params.append(case_params)
 
     os.makedirs(sweep_name, exist_ok=True)
+    sweep_path = pathlib.Path(sweep_name).resolve()
+
     case_dirs = []
     for i in range(total_cases):
-        case_dir = os.path.join(sweep_name, f"case_{i}")
-        os.makedirs(case_dir, exist_ok=True)
-        os.makedirs(os.path.join(case_dir, "plots"), exist_ok=True)
+        case_dir = sweep_path / f"case_{i}"
+        case_dir.mkdir(parents=True, exist_ok=True)
+        (case_dir / "plots").mkdir(parents=True, exist_ok=True)
         case_dirs.append(case_dir)
 
     if "box_len" in vars:
@@ -404,8 +416,9 @@ def launch_sobol(
 
     size_to_mesh_dir = {}
     for size in unique_sizes:
-        shared_mesh_dir = os.path.join(sweep_name, f"meshes_{size}")
-        os.makedirs(shared_mesh_dir, exist_ok=True)
+
+        shared_mesh_dir = sweep_path / f"meshes_{size}"
+        shared_mesh_dir.mkdir(parents=True, exist_ok=True)
 
         create_meshes_efficiently(size=size, meshsize=0.01, out_dir=shared_mesh_dir)
         size_to_mesh_dir[size] = shared_mesh_dir
@@ -449,7 +462,7 @@ def launch_sobol(
             script_contxt["ROLLING_FRICTION"] = 0
 
         rendered_content = rocky_template.render(script_contxt)
-        script_path = os.path.join(case_dir, "script_uniax.py")
+        script_path = case_dir / "script_uniax.py"
 
         with open(script_path, "w") as script_file:
             script_file.write(rendered_content)
@@ -471,21 +484,8 @@ def launch_sobol(
     # Launch all cases at once if requested
     print("\nOFAT experiments:\n", experiments_df)
     if autolaunch:
-        print("Launching all cases...")
-        for i, case_dir in enumerate(case_dirs):
-            print(f"Launching case {i}/{total_cases}...")
-            # Use subprocess to launch in the background
-            with cd(case_dir):
-                try:
-                    result = subprocess.run(
-                        ["sbatch", "runRocky.sh"],
-                        check=True,
-                        capture_output=True,
-                        text=True,
-                    )
-                    print(f"Job submitted: {result.stdout.strip()}")
-                except subprocess.CalledProcessError as e:
-                    print(f"Error submitting job: {e.stderr}")
+        _tqdm_launch(case_dirs, total_cases)
+        
 
     print(f"All {total_cases} cases prepared and launched.")
     print("Exiting launcher script now")
