@@ -1,17 +1,43 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "pyuniaxc"
+authors = [{ name = "Abhirup Roy", email = "axr154@bham.ac.uk" }]
+maintainers = [{ name = "Abhirup Roy", email = "axr154@bham.ac.uk" }]
 version = "0.1.0"
-description = "Toolkit for multiscale uniaxial compression simulations Ansys Rocky"
-readme = "README.md"
+description = "Toolkit for multiscale uniaxial compression simulations in Ansys Rocky"
+readme = { file = "README.txt", content-type = "text/markdown" }
 requires-python = ">=3.10"
 dependencies = [
-    "gmsh>=4.14.0",
-    "jinja2>=3.1.6",
+    "gmsh>=4.12.0",
+    "jinja2>=3.1.4",
     "matplotlib>=3.10.5",
-    "numpy>=2.2.6",
-    "pandas>=2.3.2",
-    "scipy>=1.15.3",
+    "numpy>=1.26.4",
+    "numpy-stl",
+    "pandas>=2.2.2",
+    "pyevtk",
+    "scikit-learn",
+    "scipy>=1.13.1",
+    "tqdm>=4.66.4",
 ]
+classifiers = [
+    "Programming Language :: Python",
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Scientific/Engineering :: Pharmaceuticals",
+]
+
+[project.optional-dependencies]
+advanced = ["ansys-rocky-core"]
+
+[tool.setuptools]
+packages = ["pyuniaxc"]
+
+[tool.setuptools.package-dir]
+pyuniaxc = "."
 
 [tool.ruff]
 per-file-ignores = { "templates/*" = ["F821"] }
