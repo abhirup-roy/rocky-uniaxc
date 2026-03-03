@@ -62,19 +62,13 @@ class ConstrainedSobol:
         self.transformer = transformer
 
         sobol_kwargs = inspect.getfullargspec(qmc.Sobol.__init__).kwonlyargs
-        if "seed" in sobol_kwargs:
-            self.sampler = qmc.Sobol(
-                d=d, scramble=scramble, bits=bits, seed=seed, optimization=optimization
-            )
-        elif "rng" in sobol_kwargs:
+        opt: str = optimization if optimization else "lloyd"
+
+        if "rng" in sobol_kwargs:
             rng = np.random.default_rng(seed)
-            self.sampler = qmc.Sobol(
-                d=d, scramble=scramble, bits=bits, rng=rng, optimization=optimization
-            )
+            self.sampler = qmc.Sobol(d=d, scramble=scramble, bits=bits, rng=rng)
         else:
-            self.sampler = qmc.Sobol(
-                d=d, scramble=scramble, bits=bits, optimization=optimization
-            )
+            self.sampler = qmc.Sobol(d=d, scramble=scramble, bits=bits)
 
     def _store_unit_cube(self, constrained_cube: np.ndarray) -> None:
         scaler = MinMaxScaler()
@@ -206,9 +200,7 @@ class LShapedTransformer:
         return final_samples
 
 
-def iter_sobol(
-    json_path: str, sobol_values: dict[str, list | float | type], min_N: int = 300
-):
+def iter_sobol(json_path: str, sobol_values: dict[str, list | str], min_N: int = 300):
     pass
     with open(json_path, "r") as f_params:
         params = json.load(f_params, object_pairs_hook=OrderedDict)
@@ -352,16 +344,17 @@ def launch_sobol(
     ncpus: Optional[int] = None,
     ngpus: Optional[int] = None,
     run_days: int = 10,
-    **kwargs,
+    template_dir: Optional[str | pathlib.Path] = None,
+    custom_sh: Optional[str] = None,
 ):
-    custom_sh = kwargs.get("custom_sh")
-    if not (template_dir := kwargs.get("template_dir")):
-        template_dir = pathlib.Path(__file__).parent.parent / "templates"
-    else:
+    if not template_dir:
+        pass
+    elif isinstance(template_dir, (str, pathlib.Path)):
         template_dir = pathlib.Path(template_dir).resolve()
-
-    if not template_dir.exists():
-        raise FileNotFoundError(f"Directory {template_dir} does not exist.")
+        if not template_dir.exists():
+            raise FileNotFoundError(f"Directory {template_dir} does not exist.")
+    else:
+        raise ValueError("template_dir must be a string path or pathlib.Path object.")
 
     target = target.upper()
     if target not in ["CPU", "GPU", "MULTI_GPU"]:
@@ -373,9 +366,14 @@ def launch_sobol(
         raise ValueError(f"{target} is not valid for location {loc}")
     target = '"' + target + '"'
     # Load template once
-    rocky_templ_env = jinja2.Environment(
-        loader=jinja2.FileSystemLoader(f"{template_dir}")
-    )
+    if not template_dir:
+        rocky_templ_env = jinja2.Environment(
+            loader=jinja2.PackageLoader("rocky_uniaxc", "templates"),
+        )
+    else:
+        rocky_templ_env = jinja2.Environment(
+            loader=jinja2.FileSystemLoader(f"{template_dir}")
+        )
     rocky_template = rocky_templ_env.get_template("template_uniax.py")
 
     experiments_df, base_dict = iter_sobol(
@@ -416,7 +414,6 @@ def launch_sobol(
 
     size_to_mesh_dir = {}
     for size in unique_sizes:
-
         shared_mesh_dir = sweep_path / f"meshes_{size}"
         shared_mesh_dir.mkdir(parents=True, exist_ok=True)
 
@@ -476,8 +473,8 @@ def launch_sobol(
             loc=loc,
             autolaunch=False,
             custom_msg=custom_sh,
-            ncpus=ncpus,
-            ngpus=ngpus,
+            ncpus=ncpus if ncpus is not None else 20,
+            ngpus=ngpus if ngpus is not None else 1,
             run_days=run_days,
         )  # Don't launch yet
 
@@ -485,7 +482,6 @@ def launch_sobol(
     print("\nOFAT experiments:\n", experiments_df)
     if autolaunch:
         _tqdm_launch(case_dirs, total_cases)
-        
 
     print(f"All {total_cases} cases prepared and launched.")
     print("Exiting launcher script now")

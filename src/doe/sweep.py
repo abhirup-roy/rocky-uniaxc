@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+from sympy.physics.units import Pa
 
 __author__ = "Abhirup Roy"
 __email__ = "axr154@bham.ac.uk"
@@ -99,14 +100,14 @@ def iter_params(json_path: str):
 
 def launch_sweep(
     sweep_name: str,
+    json_path: str,
     meshdir: str = "meshes",
-    json_path: str = "params.json",
     template_dir: Optional[str] = None,
     autolaunch=True,
-    loc: str = "bb-cpu",
-    custom_sh: str = None,
-    target: str = "CPU",
-    ncpus: int = None,
+    loc: str = "bb-gpu",
+    custom_sh: Optional[str] = None,
+    target: str = "GPU",
+    ncpus: Optional[int] = None,
 ):
     """
     Generate and launch sweep cases
@@ -124,11 +125,11 @@ def launch_sweep(
     """
     # Ensure the template directory exists
     if not template_dir:
-        template_dir = os.path.join(os.path.dirname(__file__), "templates")
+        pass
     else:
         template_dir = os.path.abspath(template_dir)
-    if not os.path.exists(template_dir):
-        raise FileNotFoundError(f"Directory {template_dir} does not exist.")
+        if not os.path.exists(template_dir):
+            raise FileNotFoundError(f"Directory {template_dir} does not exist.")
 
     target = target.upper()
     if target not in ["CPU", "GPU", "MULTI_GPU"]:
@@ -140,9 +141,15 @@ def launch_sweep(
         raise ValueError(f"{target} is not valid for location {loc}")
     target = '"' + target + '"'
     # Load template once
-    rocky_templ_env = jinja2.Environment(
-        loader=jinja2.FileSystemLoader(f"{template_dir}")
-    )
+
+    if not template_dir:
+        rocky_templ_env = jinja2.Environment(
+            loader=jinja2.PackageLoader("rocky_uniaxc", "templates"),
+        )
+    else:
+        rocky_templ_env = jinja2.Environment(
+            loader=jinja2.FileSystemLoader(f"{template_dir}")
+        )
     rocky_template = rocky_templ_env.get_template("template_uniax.py")
 
     # Get all parameter combinations
@@ -265,18 +272,3 @@ if __name__ == "__main__":
     #     target='GPU',
     #     ncpus=20
     # )
-
-    launch_ofat(
-        "ofat_examplev_test",
-        autolaunch=False,
-        json_path="json/ofat_base.json",
-        ofat_values={
-            "parameters": ["n_corners", "sq_degree"],
-            "test_range": [(10, 50), (2.0, 10.0)],
-            "hold_values": ["m", "l"],
-        },
-        n_points=5,
-        loc="az-gpu",
-        target="GPU",
-        ncpus=20,
-    )

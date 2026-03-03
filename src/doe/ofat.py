@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+from patsy.test_highlevel import t
 
 import os
 import json
 import subprocess
 from collections import OrderedDict
+from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -207,18 +209,19 @@ def launch_ofat(
     loc: str = "bb-cpu",
     target: str = "CPU",
     n_points: int = 10,
-    ncpus: int = None,
+    ncpus: Optional[int] = None,
     ngpus: int = 1,
     run_days: int = 10,
-    **kwargs,
+    template_dir: Optional[str] = None,
+    custom_sh: Optional[str] = None,
 ):
-    custom_sh = kwargs.get("custom_sh")
-    if not (template_dir := kwargs.get("template_dir")):
-        template_dir = os.path.join(os.path.dirname(__file__), "templates")
+
+    if not template_dir:
+        pass
     else:
         template_dir = os.path.abspath(template_dir)
-    if not os.path.exists(template_dir):
-        raise FileNotFoundError(f"Directory {template_dir} does not exist.")
+        if not os.path.exists(template_dir):
+            raise FileNotFoundError(f"Directory {template_dir} does not exist.")
 
     target = target.upper()
     if target not in ["CPU", "GPU", "MULTI_GPU"]:
@@ -230,9 +233,14 @@ def launch_ofat(
         raise ValueError(f"{target} is not valid for location {loc}")
     target = '"' + target + '"'
     # Load template once
-    rocky_templ_env = jinja2.Environment(
-        loader=jinja2.FileSystemLoader(f"{template_dir}")
-    )
+    if not template_dir:
+        rocky_templ_env = jinja2.Environment(
+            loader=jinja2.PackageLoader("rocky_uniaxc", "templates"),
+        )
+    else:
+        rocky_templ_env = jinja2.Environment(
+            loader=jinja2.FileSystemLoader(f"{template_dir}")
+        )
     rocky_template = rocky_templ_env.get_template("template_uniax.py")
 
     experiments_df, base_dict = iter_ofat(
@@ -348,4 +356,3 @@ def launch_ofat(
     print("\nOFAT experiments:\n", experiments_df)
     if autolaunch:
         _tqdm_launch(case_dirs, total_cases)
-

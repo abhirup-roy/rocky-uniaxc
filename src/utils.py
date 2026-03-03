@@ -1,6 +1,7 @@
 import os
 import pathlib
 import subprocess
+from typing import Optional
 
 
 class cd:
@@ -18,13 +19,13 @@ class cd:
 
 
 def slurm_sbatch(
-    case_dir: str,
+    case_dir: str | pathlib.Path,
     loc: str,
     autolaunch: bool = False,
-    custom_msg: str = None,
-    ncpus: int = None,
+    custom_msg: Optional[str] = None,
+    ncpus: Optional[int] = None,
     ngpus: int = 1,
-    run_days: int = 12
+    run_days: int = 12,
 ):
     """
     Create a slurm sbatch script for each case.
@@ -106,7 +107,7 @@ Rocky --script "script_uniax.py" --headless >> rocky.log
             f" but got '{loc}'"
         )
     # Write the sbatch script to a file
-    write_path = case_dir / "runRocky.sh"
+    write_path = (pathlib.Path(case_dir) / "runRocky.sh").resolve()
 
     #  Create the sbatch script in sweeping directory
     with open(write_path, "w") as sbatch_file:
