@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 # Import particle shapes using importlib
 shapes_spec = importlib.util.spec_from_file_location(
     "particles_shapes",
-    pathlib.Path.cwd().parent.parent.parent / "particles_shapes.py",
+    {{SHAPES_MODULE_PATH}},
 )
 if not shapes_spec:
     raise ImportError("Could not find the particles_shapes.py file.")

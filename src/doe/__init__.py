@@ -1,11 +1,15 @@
-from tqdm import tqdm
+import pathlib
 import subprocess
+from tqdm import tqdm
 from ..utils import cd
+
 
 def _tqdm_launch(case_dirs, total_cases):
     """Launch jobs using sbatch with a tqdm progress bar."""
     failed_jobs = []
-    for i, case_dir in tqdm(enumerate(case_dirs), total=total_cases, desc="Submitting Jobs", unit="case"):
+    for i, case_dir in tqdm(
+        enumerate(case_dirs), total=total_cases, desc="Submitting Jobs", unit="case"
+    ):
         # Use subprocess to launch in the background
         with cd(case_dir):
             try:
@@ -23,11 +27,18 @@ def _tqdm_launch(case_dirs, total_cases):
             except Exception as e:
                 tqdm.write(f"Unexpected error in case {i}: {e}")
                 failed_jobs.append(i)
-    
+
     if failed_jobs:
-        print(f"\nCompleted with errors. {len(failed_jobs)} jobs failed to launch (Case indices: {failed_jobs}).")
+        print(
+            f"\nCompleted with errors. {len(failed_jobs)} jobs failed to launch (Case indices: {failed_jobs})."
+        )
     else:
         print("\nSuccess: All jobs launched.")
 
     print(f"All {total_cases} cases prepared and processed.")
     print("Exiting launcher script now")
+
+
+shapes_module_path = str(
+    (pathlib.Path(__file__).parent.parent / "particles_shapes.py").resolve()
+)

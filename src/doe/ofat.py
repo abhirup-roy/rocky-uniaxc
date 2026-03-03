@@ -4,7 +4,6 @@ from patsy.test_highlevel import t
 
 import os
 import json
-import subprocess
 from collections import OrderedDict
 from typing import Optional
 
@@ -12,7 +11,7 @@ import numpy as np
 import pandas as pd
 import jinja2
 
-from . import _tqdm_launch
+from . import _tqdm_launch, shapes_module_path
 from ..compr_meshgen import create_meshes_efficiently
 from ..utils import slurm_sbatch, cd
 
@@ -325,6 +324,7 @@ def launch_ofat(
             "SMOOTHNESS": params.get("smoothness", 0.5),
             "XPU": target,
             "MESH_DIR": "meshes",
+            "SHAPES_MODULE_PATH": shapes_module_path,
         }
 
         if params["rolling"] != "none":

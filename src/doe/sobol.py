@@ -2,7 +2,6 @@ import json
 import inspect
 import os
 import pathlib
-import subprocess
 from collections import OrderedDict
 import pandas as pd
 from typing import Callable, Optional
@@ -12,7 +11,7 @@ import numpy as np
 import jinja2
 from sklearn.preprocessing import MinMaxScaler
 
-from . import _tqdm_launch
+from . import _tqdm_launch, shapes_module_path
 from ..utils import slurm_sbatch, cd
 from ..compr_meshgen import create_meshes_efficiently
 
@@ -451,6 +450,7 @@ def launch_sobol(
             "SMOOTHNESS": params.get("smoothness", 0.5),
             "XPU": target,
             "MESH_DIR": "meshes",
+            "SHAPES_MODULE_PATH": shapes_module_path,
         }
 
         if params["rolling"] != "none":

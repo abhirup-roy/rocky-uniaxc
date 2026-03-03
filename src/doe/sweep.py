@@ -16,7 +16,7 @@ from typing import Optional
 import jinja2
 
 from .ofat import launch_ofat
-from . import _tqdm_launch
+from . import _tqdm_launch, shapes_module_path
 from ..compr_meshgen import create_meshes_efficiently
 from ..utils import slurm_sbatch, cd
 
@@ -220,6 +220,7 @@ def launch_sweep(
             "SMOOTHNESS": params[-1].get("smoothness", 0.5),
             "MESH_DIR": str(meshdir),
             "XPU": target,
+            "SHAPES_MODULE_PATH": shapes_module_path,
         }
 
         if params[15] != '"none"':
