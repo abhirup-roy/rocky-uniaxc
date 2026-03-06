@@ -11,17 +11,18 @@ description = "Toolkit for multiscale uniaxial compression simulations in Ansys 
 readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.10"
 dependencies = [
-    "gmsh>=4.12.0",
-    "jinja2>=3.1.4",
-    "matplotlib>=3.10.5",
-    "numpy>=1.26.4",
-    "numpy-stl",
-    "pandas>=2.2.2",
-    "pyevtk",
-    "scikit-learn",
-    "scipy>=1.13.1",
-    "tqdm>=4.66.4",
-    "ansys-rocky-core>=0.4.0",
+    "ansys-rocky-core>=0.4.1",
+    "gmsh>=4.15.1",
+    "jinja2>=3.1.6",
+    "matplotlib>=3.10.8",
+    "medeq",
+    "numpy>=2.2.6",
+    "numpy-stl>=3.2.0",
+    "pandas>=2.3.3",
+    "pyevtk>=1.6.0",
+    "scikit-learn>=1.7.2",
+    "scipy>=1.15.3",
+    "tqdm>=4.67.3",
 ]
 classifiers = [
     "Programming Language :: Python",
