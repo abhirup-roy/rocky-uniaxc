@@ -74,7 +74,7 @@ class Shape:
         elif isinstance(self.radius, dict):
             # Check if the values are valid
             if sum(self.radius.values()) == 1:
-                radius = {k: v * 100 for k, v in self.radius.items()}
+                self.radius = {k: v * 100 for k, v in self.radius.items()}
             elif sum(self.radius.values()) == 100:
                 pass
             else:

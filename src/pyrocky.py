@@ -119,7 +119,6 @@ class UniaxialCompressionSimulation:
                 f"Provided Rocky executable path is invalid: {rocky_exe_path}"
             )
         self.rocky_exe_path = rocky_exe_path
-
         self.setup()
 
         self._particle = None
@@ -619,3 +618,16 @@ class UniaxialCompressionSimulation:
                 f.write(",".join(col_names) + "\n")
         with open(output_path, "a") as f:
             f.write(",".join(map(str, col_vals)) + "\n")
+
+    def execute(self):
+        self.load_meshes(insert=self.insertion)
+        self.load_material_properties()
+        self.load_interactions()
+        self.gen_particle()
+        self.sim_physics()
+        self.insertion_settings(insert=self.insertion)
+        self.move_top_wall(insert=self.insertion)
+        self.set_domain_settings()
+        self.load_modules()
+        self.simulate(insert=self.insertion)
+        self.post_process(sample_frac=0.9, plot=True)
