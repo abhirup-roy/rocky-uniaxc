@@ -1,11 +1,19 @@
+"""
+Pyrocky API wrapper for uniaxial compression setup.
+This module defines a Parameters dataclass for storing simulation parameters 
+and a UniaxialCompressionSimulation class that encapsulates the entire workflow
+of setting up, running, and post-processing
+"""
+
 import time
 import os
 import pathlib
 import shutil
 import subprocess
-from typing import Optional
-from dataclasses import dataclass, asdict, field
+from typing import Literal, Optional
+from dataclasses import dataclass, asdict
 import json
+import pandas as pd
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -37,23 +45,19 @@ class Parameters:
     fric_stat_pw: float
     cor_pw: float
 
-    normal_force_model: str = (
-        "linear_hysteresis"  # highly suitable for uniaxial compression
-    )
-    tangential_force_model: str = "coulomb_limit"
-    adhesion_model: str = "none"  # 'none' 'constant' 'linear' or 'JKR'
+    normal_force_model: Literal["linear_hysteresis", "hertz", "linear_spring"] = "linear_hysteresis"
+    tangential_force_model: Literal["coulomb_limit", "linear_spring_coulomb_limit"] = "coulomb_limit"
+    adhesion_model: Literal["none", "constant", "linear", "JKR"] = "none"
     # Rolling friction off by default, unreliable for polyhedra
     rolling_fric: float = 0.0
-    rolling_model: str = "none"
-    neighbor_search: str = "BVH"  # 'BVH' 'RegularGrid' or 'SparseGrid'
-    processor: str = "GPU"  # 'CPU' or 'GPU'
+    rolling_model: Literal["none", "type_a", "type_b"] = "none"
+    neighbor_search: Literal["BVH", "RegularGrid", "SparseGrid"] = "BVH"
+    processor: Literal["CPU", "GPU"] = "GPU"
 
     mesh_dir: Optional[str | pathlib.Path] = None
     plots_dir: Optional[str | pathlib.Path] = None
 
-    shape_name: str = (
-        "sphere"  # 'sphere', 'polyhedron', 'sphero_cylinder', or 'custom_polyhedron'
-    )
+    shape_name: Literal["sphere", "polyhedron", "sphero_cylinder", "custom_polyhedron"] = "sphere"
     vert_ar: float = 1.0  # vertical aspect ratio for shaped particles
     horiz_ar: float = 1.0  # horizontal aspect ratio for shaped particles
     n_corners: int = 30  # number of corners for polyhedral particles
@@ -62,8 +66,6 @@ class Parameters:
         None  # path to custom particle STL file, required if shape_name is 'custom_polyhedron'
     )
     smoothness: Optional[float] = None
-
-    shape_dict: dict[str, (str | int | float | None)] = field(default_factory=dict)
 
     def __post_init__(self):
         if self.mesh_dir is None:
@@ -86,14 +88,6 @@ class Parameters:
             self.plots_dir = pathlib.Path(self.plots_dir)
 
         self.project_dir = pathlib.Path(self.project_dir)
-
-        self.shape_dict["name"] = self.shape_name
-        self.shape_dict["vert_ar"] = self.vert_ar
-        self.shape_dict["horiz_ar"] = self.horiz_ar
-        self.shape_dict["n_corners"] = self.n_corners
-        self.shape_dict["sq_degree"] = self.sq_degree
-        self.shape_dict["smoothness"] = self.smoothness
-        self.shape_dict["particle_path"] = self.particle_path
         self._validate()
 
     def _validate(self):
@@ -228,6 +222,15 @@ class Parameters:
                 "Invalid Parameters:\n" + "\n".join(f"  - {e}" for e in errors)
             )
 
+    @property
+    def avg_particle_radius(self) -> float:
+        """Mean particle radius, weighted by probability for polydisperse distributions."""
+        if isinstance(self.p_radius, float):
+            return self.p_radius
+        radii = np.array(list(self.p_radius.keys()))
+        probs = np.array(list(self.p_radius.values()))
+        return float(np.sum(radii * probs / probs.sum()))
+
     @classmethod
     def from_json(cls, path: str | pathlib.Path, project_dir: str | pathlib.Path) -> "Parameters":
         with open(path, "r") as f:
@@ -315,11 +318,19 @@ class UniaxialCompressionSimulation:
         self.rocky.close()
         return False
 
+    @staticmethod
+    def _ser(proxy) -> dict:
+        """Serialise a Rocky API proxy for passing as an argument to another API call."""
+        return proxy.serialize(proxy)
+
     def setup(self):
         try:
             self.rocky = rocky_api.launch_rocky(self.rocky_exe_path, headless=self.headless)
         except Exception as e:
-            raise e
+            raise RuntimeError(
+                f"Failed to launch Rocky at '{self.rocky_exe_path}'. "
+                "Check that the executable is valid and the license server is reachable."
+            ) from e
 
         self._project = self.rocky.api.CreateProject()
         self._project.SaveProject(
@@ -382,16 +393,8 @@ class UniaxialCompressionSimulation:
         wall_mat.SetPoissonRatio(0.3)
         wall_mat.SetUseBulkDensity(False)
 
-        # Introspect before using
-        import inspect
-        from ansys.rocky.core.rocky_api_proxies import ApiElementProxy
-        print("serialize signature:", inspect.signature(ApiElementProxy.serialize))
-        print("wall_mat type:", type(wall_mat))
-        print("wall_mat._pool_id:", wall_mat._pool_id)
-
-        # Always use name strings — never pass proxies as arguments
-        self._mesh["top_wall"].SetMaterial(wall_mat.serialize(wall_mat))
-        self._mesh["bottom_wall"].SetMaterial(wall_mat.serialize(wall_mat))
+        self._mesh["top_wall"].SetMaterial(self._ser(wall_mat))
+        self._mesh["bottom_wall"].SetMaterial(self._ser(wall_mat))
         self._materials["particle_mat"] = particle_mat
         self._materials["wall_mat"] = wall_mat
 
@@ -401,10 +404,10 @@ class UniaxialCompressionSimulation:
 
         interaction_collection = self._study.GetMaterialsInteractionCollection()
         pp_interaction = interaction_collection.GetMaterialsInteraction(
-            pm.serialize(pm), pm.serialize(pm)
+            self._ser(pm), self._ser(pm)
         )
         pw_interaction = interaction_collection.GetMaterialsInteraction(
-            pm.serialize(pm), wm.serialize(wm)
+            self._ser(pm), self._ser(wm)
         )
 
         pp_interaction.SetRestitutionCoefficient(self.params.cor_pp)
@@ -416,11 +419,10 @@ class UniaxialCompressionSimulation:
         pw_interaction.SetStaticFriction(self.params.fric_stat_pw)
 
     def gen_particle(self):
-        shape_name = self.params.shape_dict["name"]
         self._particle = self._study.CreateParticle()
         self._particle.SetName("Particle")
 
-        match shape_name:
+        match self.params.shape_name:
             case "sphere":
                 shape = particles_shapes.Sphere(radius=self.params.p_radius)
             case "polyhedron":
@@ -448,13 +450,13 @@ class UniaxialCompressionSimulation:
                 )
             case _:
                 raise ValueError(
-                    f"Unsupported shape type: {shape_name}"
+                    f"Unsupported shape type: {self.params.shape_name}. "
                     "Supported shapes are: 'sphere', 'polyhedron', 'sphero_cylinder', and 'custom_polyhedron'."
                 )
         pm = self._materials["particle_mat"]
         shape.particle2rocky(
             particle=self._particle,
-            material=pm.serialize(pm),
+            material=self._ser(pm),
             rolling_friction=self.params.rolling_fric,
         )
 
@@ -471,31 +473,15 @@ class UniaxialCompressionSimulation:
     def insertion_settings(self, insert=True):
 
         fill_box_vol = self.params.particle_box_len**3
-        if isinstance(self.params.p_radius, float):
-            particle_vol = (4 / 3) * np.pi * self.params.p_radius**3
-        elif isinstance(self.params.p_radius, dict):
-            radii = np.array(list(self.params.p_radius.keys()))
-            probs = np.array(list(self.params.p_radius.values()))
-            probs /= probs.sum()  # normalize probabilities
-            avg_radius = np.sum(radii * probs)
-            particle_vol = (4 / 3) * np.pi * avg_radius**3
-        else:
-            raise ValueError(
-                "p_radius must be either a float or a dict of {radius: probability}."
-                " If using a dict, values must sum to 1 or 100"
-                f"Received: {type(self.params.p_radius)}"
-            )
-
-        n_particles = (
-            np.rint(fill_box_vol / particle_vol * 0.5).astype(int).item()
-        )  # target 50% fill
+        particle_vol = (4 / 3) * np.pi * self.params.avg_particle_radius**3
+        n_particles = int(np.rint(fill_box_vol / particle_vol * 0.5))  # target 50% fill
         mass_particles = particle_vol * self.params.p_density * n_particles
 
         if insert:
             inlet = self._mesh["insert_inlet"]
             particle_inlet = self._study.CreateParticleInlet(
-                inlet.serialize(inlet),
-                self._particle.serialize(self._particle),
+                self._ser(inlet),
+                self._ser(self._particle),
             )
             flowr = mass_particles / self.params.t_fill
 
@@ -542,7 +528,7 @@ class UniaxialCompressionSimulation:
         compr_motion.SetStartTime(start_time)
         compr_motion.SetStopTime(end_time)
 
-        top_wall_frame.ApplyTo(self._mesh["top_wall"].serialize(self._mesh["top_wall"]))
+        top_wall_frame.ApplyTo(self._ser(self._mesh["top_wall"]))
 
     def set_domain_settings(self):
         domain_settings = self._study.GetDomainSettings()
@@ -581,12 +567,10 @@ class UniaxialCompressionSimulation:
             ]
         )
 
-    def _check_nvidia_gpu(self):
+    def _check_nvidia_gpu(self) -> int:
         try:
             output = subprocess.check_output(["nvidia-smi", "-L"], encoding="utf-8")
-            count = len([line for line in output.strip().split("\n") if line])
-            return count
-
+            return sum(1 for line in output.strip().splitlines() if line)
         except (subprocess.CalledProcessError, FileNotFoundError):
             return 0
 
@@ -616,13 +600,9 @@ class UniaxialCompressionSimulation:
         solver = self._study.GetSolver()
         self._select_processor(solver)
 
-        if insert:
-            runtime = sum(
-                [self.params.t_fill, self.params.t_settle, self.params.t_compress]
-            )
-        else:
-            runtime = sum([self.params.t_settle, self.params.t_compress])
-        solver.SetSimulationDuration(runtime, "s")
+        p = self.params
+        phases = [p.t_fill, p.t_settle, p.t_compress] if insert else [p.t_settle, p.t_compress]
+        solver.SetSimulationDuration(sum(phases), "s")
 
         self._project.SaveProject()
 
@@ -745,26 +725,14 @@ class UniaxialCompressionSimulation:
         )
         contacts_ratio = compr_contacts / uncompr_contacts
 
-        n_particles_hist = [
-            particles.GetNumberOfParticles(time_step=ts) for ts in time_set
-        ]
-        n_lost = int(max(n_particles_hist) - n_particles_hist[-1])
-
         # Handle plotting
         if plot:
             bulk_dens = []
             contacts = []
 
             for timestep in time_set[1:]:
-                bulk_dens_ts = self._calc_bulk_density(
-                    particles, timestep, sample_frac=sample_frac
-                )
-                bulk_dens.append(bulk_dens_ts)
-
-                contact_ts = self._calc_contact_no(
-                    particles, timestep, sample_frac=sample_frac
-                )
-                contacts.append(contact_ts)
+                bulk_dens.append(self._calc_bulk_density(particles, timestep, sample_frac))
+                contacts.append(self._calc_contact_no(particles, timestep, sample_frac))
 
             fig, ax = plt.subplots(figsize=(10, 6))
             ax.plot(time_set[1:], bulk_dens, label="Bulk Density", color="C0")
@@ -779,45 +747,19 @@ class UniaxialCompressionSimulation:
             ax1.grid(visible=True)
             fig.legend()
             fig.tight_layout()
+            fig.savefig(self.params.plots_dir / "ts_bulkdens_contacts.png", dpi=300)
 
-            fig.savefig(
-                pathlib.Path(str(self.params.plots_dir)) / "ts_bulkdens_contacts.png",
-                dpi=300,
-            )
-
-        # Write all data
-
-        params_dict = asdict(self.params)
-
-        col_names = list(params_dict.keys())
-        col_vals = list(params_dict.values())
-
-        col_names.extend(
-            [
-                "uncompressed_density",
-                "compressed_density",
-                "uncompressed_contacts",
-                "compressed_contacts",
-                "contacts_ratio",
-            ]
-        )
-
-        col_vals.extend(
-            [
-                uncompr_dens,
-                compr_dens,
-                uncompr_contacts,
-                compr_contacts,
-                contacts_ratio,
-            ]
-        )
-
-        output_path = pathlib.Path(self.params.project_dir) / "results.csv"
-        if not output_path.exists():
-            with open(output_path, "w") as f:
-                f.write(",".join(col_names) + "\n")
-        with open(output_path, "a") as f:
-            f.write(",".join(map(str, col_vals)) + "\n")
+        # Write results row
+        output_path = self.params.project_dir / "results.csv"
+        row = pd.DataFrame([{
+            **asdict(self.params),
+            "uncompressed_density": uncompr_dens,
+            "compressed_density": compr_dens,
+            "uncompressed_contacts": uncompr_contacts,
+            "compressed_contacts": compr_contacts,
+            "contacts_ratio": contacts_ratio,
+        }])
+        row.to_csv(output_path, mode="a", header=not output_path.exists(), index=False)
 
     def execute(self):
         self.load_meshes(insert=self.insertion)
