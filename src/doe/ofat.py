@@ -1,7 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-from patsy.test_highlevel import t
-
 import os
 import json
 from collections import OrderedDict

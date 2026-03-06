@@ -1,21 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-from sympy.physics.units import Pa
-
-__author__ = "Abhirup Roy"
-__email__ = "axr154@bham.ac.uk"
-__status__ = "Development"
-
 import os
 import json
-import subprocess
 from collections import OrderedDict
 import itertools
 from typing import Optional
 
 import jinja2
 
-from .ofat import launch_ofat
 from . import _tqdm_launch, shapes_module_path
 from ..compr_meshgen import create_meshes_efficiently
 from ..utils import slurm_sbatch, cd
