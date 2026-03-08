@@ -117,7 +117,7 @@ class RockyMED:
             seed=self.seed,
         )
 
-        del os.environ["ROCKY_MED_CONFIG"]
-
         self.med.sample(n)
         self.med.evaluate()
+
+        del os.environ["ROCKY_MED_CONFIG"]
