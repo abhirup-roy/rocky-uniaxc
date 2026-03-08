@@ -16,12 +16,14 @@ __all__ = [
     "externals",
     "launch_sobol",
     "pyrocky",
+    "med",
 ]
 
 
 from .doe.sweep import launch_sweep
 from .doe.ofat import launch_ofat
 from .doe.sobol import launch_sobol
+from .doe import med
 from . import sweep_analysis as analyse
 from . import externals
 from . import pyrocky
