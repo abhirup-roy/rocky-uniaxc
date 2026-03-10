@@ -100,10 +100,22 @@ class RockyMED:
         return self.sample(x, med)
 
     def _serialize_full_config(self) -> str:
+        class _Encoder(json.JSONEncoder):
+            def default(self, obj):
+                if isinstance(obj, pathlib.Path):
+                    return str(obj)
+                if isinstance(obj, np.integer):
+                    return int(obj)
+                if isinstance(obj, np.floating):
+                    return float(obj)
+                if isinstance(obj, np.ndarray):
+                    return obj.tolist()
+                return super().default(obj)
+
         config_data = deepcopy(self.med_config)
         config_data["settings"] = asdict(self.sim_settings)  # type: ignore
 
-        return json.dumps(config_data)
+        return json.dumps(config_data, cls=_Encoder)
 
     def run(self, n: int):
 

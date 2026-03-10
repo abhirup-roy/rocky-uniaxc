@@ -1,10 +1,11 @@
+# MED PARAMETERS START
 import hashlib
 import os
 import json
 import pathlib
 import medeq
 from dataclasses import asdict, fields, replace
-from ...pyrocky import Settings, UniaxialCompressionSimulation
+from rocky_uniaxc.pyrocky import Settings, UniaxialCompressionSimulation
 
 config_str = os.environ.get("ROCKY_MED_CONFIG")
 if not config_str:
@@ -16,10 +17,11 @@ if not config_str:
 config = json.loads(config_str)
 sim_settings = Settings.from_dict(config.pop("settings"))
 
-med_params = medeq.create_parameters(
+parameters = medeq.create_parameters(
     config["variables"], config["minima"], config["maxima"]
 )
-med_subset = med_params["value"].to_dict()
+# MED PARAMETERS END
+med_subset = parameters["value"].to_dict()
 
 # Give each evaluation own project directory so runs never overwrite each other.
 _param_hash = hashlib.sha1(
