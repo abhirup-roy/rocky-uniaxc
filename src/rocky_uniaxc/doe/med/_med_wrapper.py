@@ -4,15 +4,19 @@ import os
 import json
 import pathlib
 import medeq
-from dataclasses import asdict, fields, replace
+from dataclasses import replace
 from rocky_uniaxc.pyrocky import Settings, UniaxialCompressionSimulation
 
 config_str = os.environ.get("ROCKY_MED_CONFIG")
 if not config_str:
-    raise RuntimeError(
-        "ROCKY_MED_CONFIG environment variable is missing. "
-        "Did you run this through the RockyMED class?"
-    )
+    config_path = os.environ.get("ROCKY_MED_CONFIG_PATH")
+    if not config_path:
+        raise RuntimeError(
+            "Neither ROCKY_MED_CONFIG nor ROCKY_MED_CONFIG_PATH is set. "
+            "Did you run this through the RockyMED class?"
+        )
+    with open(config_path, "r") as f:
+        config_str = f.read()
 
 config = json.loads(config_str)
 sim_settings = Settings.from_dict(config.pop("settings"))
