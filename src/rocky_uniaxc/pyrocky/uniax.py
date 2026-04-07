@@ -10,17 +10,20 @@ import os
 import pathlib
 import shutil
 import subprocess
-from typing import Literal, Optional
+from typing import Literal, Optional, Any
 from dataclasses import dataclass, asdict, fields, MISSING
 import json
 import pandas as pd
+import warnings
 
 import numpy as np
 import matplotlib.pyplot as plt
 import ansys.rocky.core as rocky_api
 
-from . import particles_shapes
-from .compr_meshgen import create_meshes_efficiently
+from .. import particles_shapes
+from ..compr_meshgen import create_meshes
+from .. import ROCKY_EXE_PATH, HEADLESS
+from .helpers import pyrocky_run
 
 __all__ = ["Settings", "UniaxialCompressionSimulation"]
 
@@ -84,7 +87,7 @@ class Settings:
             self.mesh_dir = pathlib.Path(self.mesh_dir)
 
         if not self.mesh_dir.exists():
-            create_meshes_efficiently(
+            create_meshes(
                 size=self.particle_box_len,
                 out_dir=self.mesh_dir,
             )
@@ -297,32 +300,19 @@ class Settings:
         return cls(**data)
 
 
+@pyrocky_run(headless=HEADLESS)
 class UniaxialCompressionSimulation:
+    rocky: Any
+
     def __init__(
         self,
         settings: Settings,
-        rocky_exe_path: Optional[str] = None,
         insertion=True,
         filename: str = "uniaxial_compression.rocky",
-        headless: bool = True,
     ):
         self.settings = settings
         self.insertion = insertion
         self.filename = filename
-        self.headless = headless
-
-        if not rocky_exe_path:
-            rocky_exe_path = shutil.which("Rocky")
-            if not rocky_exe_path:
-                raise FileNotFoundError(
-                    "Rocky executable not found in system PATH. \n"
-                    "Please provide the path to the Rocky executable."
-                )
-        elif not pathlib.Path(rocky_exe_path).is_file():
-            raise FileNotFoundError(
-                f"Provided Rocky executable path is invalid: {rocky_exe_path}"
-            )
-        self.rocky_exe_path = rocky_exe_path
         self.setup()
 
         self._particle = None
@@ -332,29 +322,12 @@ class UniaxialCompressionSimulation:
         self.active_boxes = {}
         self.active_euls = {}
 
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.rocky.close()
-        return False
-
     @staticmethod
     def _ser(proxy) -> dict:
         """Serialise a Rocky API proxy for passing as an argument to another API call."""
         return proxy.serialize(proxy)
 
     def setup(self):
-        try:
-            self.rocky = rocky_api.launch_rocky(
-                self.rocky_exe_path, headless=self.headless
-            )
-        except Exception as e:
-            raise RuntimeError(
-                f"Failed to launch Rocky at '{self.rocky_exe_path}'. "
-                "Check that the executable is valid and the license server is reachable."
-            ) from e
-
         self._project = self.rocky.api.CreateProject()
         self._project.SaveProject(
             str(pathlib.Path(self.settings.project_dir) / self.filename)
@@ -778,7 +751,10 @@ class UniaxialCompressionSimulation:
             ax1.grid(visible=True)
             fig.legend()
             fig.tight_layout()
-            fig.savefig(pathlib.Path(self.settings.plots_dir) / "ts_bulkdens_contacts.png", dpi=300)
+            fig.savefig(
+                pathlib.Path(self.settings.plots_dir) / "ts_bulkdens_contacts.png",
+                dpi=300,
+            )
 
         # Write results row
         output_path = pathlib.Path(self.settings.project_dir) / "results.csv"
