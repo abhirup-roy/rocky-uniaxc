@@ -1,17 +1,28 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import logging
 import os
-import json
 from collections import OrderedDict
 import itertools
+from pathlib import Path
 from typing import Optional
 
 import jinja2
 
 from . import _tqdm_launch, shapes_module_path
+from ._doe_utils import (
+    SimParams,
+    ShapeConfig,
+    case_directory,
+    script_context_from_params,
+    get_unique_box_lens,
+    prepare_case,
+)
 from ..compr_meshgen import create_meshes
-from ..utils import slurm_sbatch, cd
+from ..utils import slurm_sbatch
 from .. import BACKEND
+
+logger = logging.getLogger(__name__)
 
 """
 This script generates multiple cases for Rocky DEM simulations using a template and a set of parameters.
@@ -34,40 +45,26 @@ Example usage:
 """
 
 
-def iter_params(json_path: str):
+def iter_params(json_path: str) -> list[SimParams]:
     """
     Iterate over all parameter combinations.
 
     Args:
         json_path: Path to json config for sweep
+
+    Returns:
+        List of SimParams instances for each parameter combination
     """
-    # Load the JSON file
     with open(json_path, "r") as f_params:
         params = json.load(f_params, object_pairs_hook=OrderedDict)
 
-    # Handle shape parameters - now it's an array of shape objects
     shape_list = params["shape"]
     if not isinstance(shape_list, list):
         shape_list = [shape_list]
 
-    # Extract all possible values for each shape parameter
-    shape_names = []
-    vert_ars = []
-    horiz_ars = []
-    n_corners_list = []
-    sq_degrees = []
-    particle_paths = []
+    shape_configs = [ShapeConfig.from_dict(s) for s in shape_list]
+    logger.debug("Loaded %d shape configurations", len(shape_configs))
 
-    for shape in shape_list:
-        print(shape)
-        shape_names.append(shape.get("name", "sphere"))
-        vert_ars.append(shape.get("vert_ar", 1.0))
-        horiz_ars.append(shape.get("horiz_ar", 1.0))
-        n_corners_list.append(shape.get("n_corners", 6))
-        sq_degrees.append(shape.get("sq_degree", 1.0))
-        particle_paths.append(shape.get("particle_path", ""))
-
-    # Find all combinations of parameters
     param_combinations = itertools.product(
         params["particle_properties"]["radius"],
         params["particle_properties"]["density"],
@@ -88,7 +85,11 @@ def iter_params(json_path: str):
         params["contact_model"]["adhesion"],
         shape_list,
     )
-    return param_combinations
+
+    return [
+        SimParams.from_tuple(combo[:17], shape=combo[17])
+        for combo in param_combinations
+    ]
 
 
 def launch_sweep(
@@ -123,12 +124,9 @@ def launch_sweep(
     if backend not in ["rocky_prepost", "pyrocky"]:
         raise ValueError("backend must be 'rocky_prepost' or 'pyrocky'")
 
-    # Ensure the template directory exists
-    if not template_dir:
-        pass
-    else:
-        template_dir = os.path.abspath(template_dir)
-        if not os.path.exists(template_dir):
+    if template_dir:
+        template_dir = Path(template_dir).resolve()
+        if not template_dir.exists():
             raise FileNotFoundError(f"Directory {template_dir} does not exist.")
 
     target = target.upper()
@@ -139,163 +137,68 @@ def launch_sweep(
 
     if (loc == "bb-cpu" and target == "GPU") or (loc == "az-gpu" and target == "CPU"):
         raise ValueError(f"{target} is not valid for location {loc}")
-    target = '"' + target + '"'
-    # Load template once
 
+    target_quoted = f'"{target}"'
+
+    # Load template
     if not template_dir:
         rocky_templ_env = jinja2.Environment(
             loader=jinja2.PackageLoader("rocky_uniaxc", "templates"),
         )
     else:
         rocky_templ_env = jinja2.Environment(
-            loader=jinja2.FileSystemLoader(f"{template_dir}")
+            loader=jinja2.FileSystemLoader(str(template_dir))
         )
     rocky_template = rocky_templ_env.get_template("template_uniax.py")
 
-    # Get all parameter combinations
     all_params = list(iter_params(json_path))
     total_cases = len(all_params)
-    print(f"Setting up {total_cases} cases...")
+    logger.info("Setting up %d cases...", total_cases)
 
-    # Create the sweep directory
-    os.makedirs(sweep_name, exist_ok=True)
+    sweep_path = Path(sweep_name)
+    sweep_path.mkdir(exist_ok=True)
 
-    # Create directories for all cases first (parallel processing preparation)
     case_dirs = []
     for i in range(total_cases):
-        case_dir = os.path.join(sweep_name, f"case_{i}")
-        os.makedirs(case_dir, exist_ok=True)
-        os.makedirs(os.path.join(case_dir, "plots"), exist_ok=True)
-        os.makedirs(os.path.join(case_dir, meshdir), exist_ok=True)
-        case_dirs.append(case_dir)
+        case_dirs.append(sweep_path / f"case_{i}")
 
-    # Generate meshes only once per unique size
-    # This is a major optimization - don't recreate identical meshes
-    unique_sizes = set([params[11] for params in all_params])  # Box length parameter
+    unique_sizes = get_unique_box_lens(all_params)
+    logger.info("Generating meshes for %d unique sizes...", len(unique_sizes))
+
     size_to_mesh_dir = {}
-
-    print(f"Generating meshes for {len(unique_sizes)} unique sizes...")
     for size in unique_sizes:
-        # Create a shared mesh directory for this size
-        shared_mesh_dir = os.path.join(sweep_name, f"meshes_{size}")
-        os.makedirs(shared_mesh_dir, exist_ok=True)
-
-        # Generate meshes only once for each unique size
-        create_meshes(size, meshsize=0.01, out_dir=shared_mesh_dir)
-
+        shared_mesh_dir = sweep_path / f"meshes_{size}"
+        shared_mesh_dir.mkdir(parents=True, exist_ok=True)
+        create_meshes(size, meshsize=0.01, out_dir=str(shared_mesh_dir))
         size_to_mesh_dir[size] = shared_mesh_dir
 
-    # Write scripts and prepare to launch
-    print("Generating scripts and preparing jobs...")
+    logger.info("Generating scripts and preparing jobs...")
     for i, params in enumerate(all_params):
         case_dir = case_dirs[i]
-        print(params)
 
-        # Prepare script context
-        script_contxt = {
-            "RADIUS_P": params[0],
-            "DENSITY_P": params[1],
-            "POISSON_P": params[2],
-            "YOUNGMOD_P": params[3],
-            "DYNAMIC_FRICTION_PP": params[4],
-            "STATIC_FRICTION_PP": params[5],
-            "COR_PP": params[7],
-            "DYNAMIC_FRICTION_PW": params[8],
-            "STATIC_FRICTION_PW": params[9],
-            "COR_PW": params[10],
-            "L_BOX": params[11],
-            "P_COMPRESS": params[12],
-            "NORMAL_MODEL": params[13],
-            "TANG_MODEL": params[14],
-            "ROLLING_MODEL": params[15],
-            "ADH_MODEL": params[16],
-            "SHAPE": params[-1].get(
-                "name", "sphere"
-            ),  # Use the name from the shape object
-            "VERT_AR": params[-1].get("vert_ar", 0.5),
-            "HORIZ_AR": params[-1].get("horiz_ar", 1.0),
-            "N_CORNERS": int(params[-1].get("n_corners", 8)),
-            "SQ_DEGREE": params[-1].get("sq_degree", 2.0),
-            "PARTICLE_PATH": params[-1].get("particle_path", ""),
-            "SMOOTHNESS": params[-1].get("smoothness", 0.5),
-            "MESH_DIR": str(meshdir),
-            "XPU": target,
-            "SHAPES_MODULE_PATH": shapes_module_path,
-        }
+        with case_directory(sweep_path, i, meshdir):
+            pass
 
-        if params[15] != '"none"':
-            script_contxt["ROLLING_FRICTION"] = params[6]
+        script_contxt = script_context_from_params(params, target_quoted, meshdir)
+        script_contxt["SHAPES_MODULE_PATH"] = shapes_module_path
+        prepare_case(case_dir, script_contxt, backend, rocky_template)
 
-        print(params)
+        logger.debug("Case %d prepared: %s", i, params.shape.name)
 
-        if backend == "rocky_prepost":
-            # Render template and write script
-            rendered_content = rocky_template.render(script_contxt)
-            script_path = os.path.join(case_dir, "script_uniax.py")
-            with open(script_path, "w") as script_file:
-                script_file.write(rendered_content)
-        elif backend == "pyrocky":
-            script_path = os.path.join(case_dir, "script_uniax.py")
-            with open(script_path, "w") as script_file:
-                script_file.write(f"""
-import os
-from rocky_uniaxc.pyrocky.uniax import Settings, UniaxialCompressionSimulation
-
-def run():
-    settings = Settings(
-        project_dir=r"{os.path.abspath(case_dir)}",
-        particle_box_len={script_contxt["L_BOX"]},
-        t_fill=1.0,
-        t_settle=0.5,
-        t_compress=2.0,
-        p_compress={script_contxt["P_COMPRESS"]},
-        
-        p_radius={script_contxt["RADIUS_P"]},
-        p_density={script_contxt["DENSITY_P"]},
-        p_youngmod={script_contxt["YOUNGMOD_P"]},
-        p_poisson={script_contxt["POISSON_P"]},
-        fric_dyn_pp={script_contxt["DYNAMIC_FRICTION_PP"]},
-        fric_stat_pp={script_contxt["STATIC_FRICTION_PP"]},
-        cor_pp={script_contxt["COR_PP"]},
-        fric_dyn_pw={script_contxt["DYNAMIC_FRICTION_PW"]},
-        fric_stat_pw={script_contxt["STATIC_FRICTION_PW"]},
-        cor_pw={script_contxt["COR_PW"]},
-        
-        normal_force_model={repr(script_contxt["NORMAL_MODEL"].strip('"'))},
-        tangential_force_model={repr(script_contxt["TANG_MODEL"].strip('"'))},
-        adhesion_model={repr(script_contxt["ADH_MODEL"].strip('"'))},
-        rolling_fric={script_contxt.get("ROLLING_FRICTION", 0.0)},
-        rolling_model={repr(script_contxt["ROLLING_MODEL"].strip('"'))},
-        
-        processor={repr(script_contxt["XPU"].strip('"'))},
-        mesh_dir=r"{os.path.abspath(os.path.join(case_dir, script_contxt["MESH_DIR"]))}",
-        
-        shape_name={repr(script_contxt["SHAPE"].strip('"'))},
-        vert_ar={script_contxt["VERT_AR"]},
-        horiz_ar={script_contxt["HORIZ_AR"]},
-        n_corners={script_contxt["N_CORNERS"]},
-        sq_degree={script_contxt["SQ_DEGREE"]},
-        particle_path={repr(script_contxt["PARTICLE_PATH"])},
-        smoothness={script_contxt["SMOOTHNESS"]},
-    )
-    sim = UniaxialCompressionSimulation(settings)
-    sim.execute()
-
-if __name__ == "__main__":
-    run()
-""")
-
-        # Log case information
-        print(f"Case {i}/{total_cases} prepared")
-
-        # Create SLURM script
         slurm_sbatch(
-            case_dir, loc=loc, autolaunch=False, custom_msg=custom_sh, ncpus=ncpus
-        )  # Don't launch yet
+            str(case_dir),
+            loc=loc,
+            autolaunch=False,
+            custom_msg=custom_sh,
+            ncpus=ncpus,
+        )
 
-    # Launch all cases at once if requested
+        logger.info("Case %d/%d prepared", i + 1, total_cases)
+
+    logger.info("\nAll cases:\n%s", all_params)
+
     if autolaunch:
-        _tqdm_launch(case_dirs, total_cases)
+        _tqdm_launch([str(d) for d in case_dirs], total_cases)
 
 
 if __name__ == "__main__":

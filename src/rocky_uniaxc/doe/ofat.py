@@ -1,6 +1,7 @@
-import os
 import json
+import logging
 from collections import OrderedDict
+from pathlib import Path
 from typing import Optional
 
 import numpy as np
@@ -8,9 +9,15 @@ import pandas as pd
 import jinja2
 
 from . import _tqdm_launch, shapes_module_path
+from ._doe_utils import (
+    case_directory,
+    prepare_case,
+)
 from ..compr_meshgen import create_meshes
-from ..utils import slurm_sbatch, cd
+from ..utils import slurm_sbatch
 from .. import BACKEND
+
+logger = logging.getLogger(__name__)
 
 
 def iter_ofat(json_path: str, ofat_values: dict[str, list | str], n_points: int):
@@ -22,17 +29,14 @@ def iter_ofat(json_path: str, ofat_values: dict[str, list | str], n_points: int)
         ofat_values: A dictionary containing the OFAT parameters, test range.
             Accepts the following keys: 'parameters', 'test_range', and 'hold_values'.
     """
-    # Load the JSON file
     with open(json_path, "r") as f_params:
         params = json.load(f_params, object_pairs_hook=OrderedDict)
 
-    # Handle shape parameters - now it's an array of shape objects
     shape = params["shape"]
     if isinstance(shape, list):
         raise ValueError("Shape parameters should be a single object, not a list.")
 
-    # Manual check for parameter types
-    # Base case should NOT be a list
+    # Validate no list values in base parameters
     for p in (
         params["particle_properties"]["radius"],
         params["particle_properties"]["density"],
@@ -58,7 +62,6 @@ def iter_ofat(json_path: str, ofat_values: dict[str, list | str], n_points: int)
                 f"Parameter values should not be lists. Use a single value for {p}."
             )
 
-    # Check if ofat_values is a dictionary and contains the required keys
     if not isinstance(ofat_values, dict):
         raise ValueError("OFAT values must be provided as a dictionary.")
 
@@ -71,28 +74,28 @@ def iter_ofat(json_path: str, ofat_values: dict[str, list | str], n_points: int)
         )
 
     ofat_base_valid = {
-        "radius": params["particle_properties"]["radius"],  # float
-        "density": params["particle_properties"]["density"],  # float
-        "poisson": params["particle_properties"]["poisson"],  # float
-        "youngmod": params["particle_properties"]["youngmod"],  # float
-        "fric_dyn_pp": params["inseractions"]["pp"]["fric_dyn"],  # float
-        "fric_stat_pp": params["inseractions"]["pp"]["fric_stat"],  # float
-        "fric_rolling_pp": params["inseractions"]["pp"]["fric_rolling"],  # float
-        "cor_pp": params["inseractions"]["pp"]["cor"],  # float
-        "fric_dyn_pw": params["inseractions"]["pw"]["fric_dyn"],  # float
-        "fric_stat_pw": params["inseractions"]["pw"]["fric_stat"],  # float
-        "cor_pw": params["inseractions"]["pw"]["cor"],  # float
-        "box_len": params["experim_settings"]["box_len"],  # float
-        "p_compress": params["experim_settings"]["p_compress"],  # float
-        "normal": params["contact_model"]["normal"],  # float
-        "tangential": params["contact_model"]["tangential"],  # float
-        "rolling": params["contact_model"]["rolling"],  # float
-        "adhesion": params["contact_model"]["adhesion"],  # float
-        "shape": params["shape"]["name"],  # string
-        "vert_ar": params["shape"]["vert_ar"],  # float
-        "horiz_ar": params["shape"]["horiz_ar"],  # float
-        "n_corners": params["shape"]["n_corners"],  # int
-        "sq_degree": params["shape"]["sq_degree"],  # float
+        "radius": params["particle_properties"]["radius"],
+        "density": params["particle_properties"]["density"],
+        "poisson": params["particle_properties"]["poisson"],
+        "youngmod": params["particle_properties"]["youngmod"],
+        "fric_dyn_pp": params["inseractions"]["pp"]["fric_dyn"],
+        "fric_stat_pp": params["inseractions"]["pp"]["fric_stat"],
+        "fric_rolling_pp": params["inseractions"]["pp"]["fric_rolling"],
+        "cor_pp": params["inseractions"]["pp"]["cor"],
+        "fric_dyn_pw": params["inseractions"]["pw"]["fric_dyn"],
+        "fric_stat_pw": params["inseractions"]["pw"]["fric_stat"],
+        "cor_pw": params["inseractions"]["pw"]["cor"],
+        "box_len": params["experim_settings"]["box_len"],
+        "p_compress": params["experim_settings"]["p_compress"],
+        "normal": params["contact_model"]["normal"],
+        "tangential": params["contact_model"]["tangential"],
+        "rolling": params["contact_model"]["rolling"],
+        "adhesion": params["contact_model"]["adhesion"],
+        "shape": params["shape"]["name"],
+        "vert_ar": params["shape"]["vert_ar"],
+        "horiz_ar": params["shape"]["horiz_ar"],
+        "n_corners": params["shape"]["n_corners"],
+        "sq_degree": params["shape"]["sq_degree"],
     }
 
     if not set(ofat_values["parameters"]).issubset(set(ofat_base_valid.keys())):
@@ -212,17 +215,14 @@ def launch_ofat(
     custom_sh: Optional[str] = None,
     backend: Optional[str] = None,
 ):
-
     if not backend:
         backend = BACKEND
     if backend not in ["rocky_prepost", "pyrocky"]:
         raise ValueError("backend must be 'rocky_prepost' or 'pyrocky'")
 
-    if not template_dir:
-        pass
-    else:
-        template_dir = os.path.abspath(template_dir)
-        if not os.path.exists(template_dir):
+    if template_dir:
+        template_dir = Path(template_dir).resolve()
+        if not template_dir.exists():
             raise FileNotFoundError(f"Directory {template_dir} does not exist.")
 
     target = target.upper()
@@ -233,15 +233,17 @@ def launch_ofat(
 
     if (loc == "bb-cpu" and target == "GPU") or (loc == "az-gpu" and target == "CPU"):
         raise ValueError(f"{target} is not valid for location {loc}")
-    target = '"' + target + '"'
-    # Load template once
+
+    target_quoted = f'"{target}"'
+
+    # Load template
     if not template_dir:
         rocky_templ_env = jinja2.Environment(
             loader=jinja2.PackageLoader("rocky_uniaxc", "templates"),
         )
     else:
         rocky_templ_env = jinja2.Environment(
-            loader=jinja2.FileSystemLoader(f"{template_dir}")
+            loader=jinja2.FileSystemLoader(str(template_dir))
         )
     rocky_template = rocky_templ_env.get_template("template_uniax.py")
 
@@ -250,28 +252,15 @@ def launch_ofat(
     )
 
     total_cases = len(experiments_df)
-    vars = experiments_df.columns.tolist()
+    vars_list = experiments_df.columns.tolist()
+    logger.info("Setting up %d OFAT cases...", total_cases)
 
-    # Generate all cases
-    all_params = []
+    sweep_path = Path(sweep_name)
+    sweep_path.mkdir(exist_ok=True)
 
-    for _, row in experiments_df.iterrows():
-        exp_dict = {}
-        for i in range(len(vars)):
-            exp_dict[vars[i]] = row[vars[i]]
-        exp_dict.update(base_dict)
-        all_params.append(exp_dict)
-
-    # Create the sweep directory
-    os.makedirs(sweep_name, exist_ok=True)
-
-    # Create directories for all cases first (parallel processing preparation)
     case_dirs = []
     for i in range(total_cases):
-        case_dir = os.path.join(sweep_name, f"case_{i}")
-        os.makedirs(case_dir, exist_ok=True)
-        os.makedirs(os.path.join(case_dir, "plots"), exist_ok=True)
-        case_dirs.append(case_dir)
+        case_dirs.append(sweep_path / f"case_{i}")
 
     if "box_len" in experiments_df.columns:
         unique_sizes = set(experiments_df["box_len"])
@@ -282,130 +271,76 @@ def launch_ofat(
             "No box length parameter found in experiments or base dictionary. "
             "Debugging required"
         )
+
+    logger.info("Generating meshes for %d unique sizes...", len(unique_sizes))
     size_to_mesh_dir = {}
-
-    print(f"Generating meshes for {len(unique_sizes)} unique sizes...")
     for size in unique_sizes:
-        # Create a shared mesh directory for this size
-        shared_mesh_dir = os.path.join(sweep_name, f"meshes_{size}")
-        os.makedirs(shared_mesh_dir, exist_ok=True)
-
-        # Generate meshes only once for each unique size
-        create_meshes(size, meshsize=0.01, out_dir=shared_mesh_dir)
-
+        shared_mesh_dir = sweep_path / f"meshes_{size}"
+        shared_mesh_dir.mkdir(parents=True, exist_ok=True)
+        create_meshes(size, meshsize=0.01, out_dir=str(shared_mesh_dir))
         size_to_mesh_dir[size] = shared_mesh_dir
 
-    # Write scripts and prepare to launch
-    print("Generating scripts and preparing jobs...")
-    for i, params in enumerate(all_params):
+    logger.info("Generating scripts and preparing jobs...")
+    for i, row in experiments_df.iterrows():
         case_dir = case_dirs[i]
 
-        # Prepare script context
+        with case_directory(sweep_path, i, "meshes"):
+            pass
+
+        exp_dict = {var: row[var] for var in vars_list}
+        exp_dict.update(base_dict)
+
         script_contxt = {
-            "RADIUS_P": params["radius"],
-            "DENSITY_P": params["density"],
-            "POISSON_P": params["poisson"],
-            "YOUNGMOD_P": params["youngmod"],
-            "DYNAMIC_FRICTION_PP": params["fric_dyn_pp"],
-            "STATIC_FRICTION_PP": params["fric_stat_pp"],
-            "COR_PP": params["cor_pp"],
-            "DYNAMIC_FRICTION_PW": params["fric_dyn_pw"],
-            "STATIC_FRICTION_PW": params["fric_stat_pp"],
-            "COR_PW": params["cor_pw"],
-            "L_BOX": params["box_len"],
-            "P_COMPRESS": params["p_compress"],
-            "NORMAL_MODEL": params["normal"],
-            "TANG_MODEL": params["tangential"],
-            "ROLLING_MODEL": params["rolling"],
-            "ADH_MODEL": params["adhesion"],
-            "SHAPE": params["shape"],
-            "VERT_AR": params.get("vert_ar"),
-            "HORIZ_AR": params.get("horiz_ar"),
-            "N_CORNERS": int(params.get("n_corners")),
-            "SQ_DEGREE": params.get("sq_degree"),
-            "PARTICLE_PATH": params.get("particle_path"),
-            "SMOOTHNESS": params.get("smoothness", 0.5),
-            "XPU": target,
+            "RADIUS_P": exp_dict["radius"],
+            "DENSITY_P": exp_dict["density"],
+            "POISSON_P": exp_dict["poisson"],
+            "YOUNGMOD_P": exp_dict["youngmod"],
+            "DYNAMIC_FRICTION_PP": exp_dict["fric_dyn_pp"],
+            "STATIC_FRICTION_PP": exp_dict["fric_stat_pp"],
+            "COR_PP": exp_dict["cor_pp"],
+            "DYNAMIC_FRICTION_PW": exp_dict["fric_dyn_pw"],
+            "STATIC_FRICTION_PW": exp_dict["fric_stat_pw"],
+            "COR_PW": exp_dict["cor_pw"],
+            "L_BOX": exp_dict["box_len"],
+            "P_COMPRESS": exp_dict["p_compress"],
+            "NORMAL_MODEL": exp_dict["normal"],
+            "TANG_MODEL": exp_dict["tangential"],
+            "ROLLING_MODEL": exp_dict["rolling"],
+            "ADH_MODEL": exp_dict["adhesion"],
+            "SHAPE": exp_dict["shape"],
+            "VERT_AR": exp_dict.get("vert_ar"),
+            "HORIZ_AR": exp_dict.get("horiz_ar"),
+            "N_CORNERS": int(exp_dict.get("n_corners", 8)),
+            "SQ_DEGREE": exp_dict.get("sq_degree"),
+            "PARTICLE_PATH": exp_dict.get("particle_path"),
+            "SMOOTHNESS": exp_dict.get("smoothness", 0.5),
+            "XPU": target_quoted,
             "MESH_DIR": "meshes",
             "SHAPES_MODULE_PATH": shapes_module_path,
         }
 
-        if params["rolling"] != "none":
-            script_contxt["ROLLING_FRICTION"] = params["rolling"]
+        if exp_dict["rolling"] != "none":
+            script_contxt["ROLLING_FRICTION"] = exp_dict["rolling"]
         else:
             script_contxt["ROLLING_FRICTION"] = 0
 
-        if backend == "rocky_prepost":
-            rendered_content = rocky_template.render(script_contxt)
-            script_path = os.path.join(case_dir, "script_uniax.py")
-            with open(script_path, "w") as script_file:
-                script_file.write(rendered_content)
-        elif backend == "pyrocky":
-            script_path = os.path.join(case_dir, "script_uniax.py")
-            with open(script_path, "w") as script_file:
-                script_file.write(f"""
-import os
-from rocky_uniaxc.pyrocky.uniax import Settings, UniaxialCompressionSimulation
+        prepare_case(case_dir, script_contxt, backend, rocky_template)
 
-def run():
-    settings = Settings(
-        project_dir=r"{os.path.abspath(case_dir)}",
-        particle_box_len={script_contxt["L_BOX"]},
-        t_fill=1.0,
-        t_settle=0.5,
-        t_compress=2.0,
-        p_compress={script_contxt["P_COMPRESS"]},
-        
-        p_radius={script_contxt["RADIUS_P"]},
-        p_density={script_contxt["DENSITY_P"]},
-        p_youngmod={script_contxt["YOUNGMOD_P"]},
-        p_poisson={script_contxt["POISSON_P"]},
-        fric_dyn_pp={script_contxt["DYNAMIC_FRICTION_PP"]},
-        fric_stat_pp={script_contxt["STATIC_FRICTION_PP"]},
-        cor_pp={script_contxt["COR_PP"]},
-        fric_dyn_pw={script_contxt["DYNAMIC_FRICTION_PW"]},
-        fric_stat_pw={script_contxt["STATIC_FRICTION_PW"]},
-        cor_pw={script_contxt["COR_PW"]},
-        
-        normal_force_model={repr(script_contxt["NORMAL_MODEL"].strip('"'))},
-        tangential_force_model={repr(script_contxt["TANG_MODEL"].strip('"'))},
-        adhesion_model={repr(script_contxt["ADH_MODEL"].strip('"'))},
-        rolling_fric={script_contxt.get("ROLLING_FRICTION", 0.0)},
-        rolling_model={repr(script_contxt["ROLLING_MODEL"].strip('"'))},
-        
-        processor={repr(script_contxt["XPU"].strip('"'))},
-        mesh_dir=r"{os.path.abspath(os.path.join(case_dir, script_contxt["MESH_DIR"]))}",
-        
-        shape_name={repr(script_contxt["SHAPE"].strip('"'))},
-        vert_ar={script_contxt["VERT_AR"]},
-        horiz_ar={script_contxt["HORIZ_AR"]},
-        n_corners={script_contxt["N_CORNERS"]},
-        sq_degree={script_contxt["SQ_DEGREE"]},
-        particle_path={repr(script_contxt["PARTICLE_PATH"])},
-        smoothness={script_contxt["SMOOTHNESS"]},
-    )
-    sim = UniaxialCompressionSimulation(settings)
-    sim.execute()
+        logger.debug("Case %d prepared", i)
 
-if __name__ == "__main__":
-    run()
-""")
-
-        # Log case information
-        print(f"Case {i + 1}/{total_cases} prepared")
-
-        # Create SLURM script
         slurm_sbatch(
-            case_dir,
+            str(case_dir),
             loc=loc,
             autolaunch=False,
             custom_msg=custom_sh,
             ncpus=ncpus,
             ngpus=ngpus,
             run_days=run_days,
-        )  # Don't launch yet
+        )
 
-    # Launch all cases at once if requested
-    print("\nOFAT experiments:\n", experiments_df)
+        logger.info("Case %d/%d prepared", i + 1, total_cases)
+
+    logger.info("\nOFAT experiments:\n%s", experiments_df)
+
     if autolaunch:
-        _tqdm_launch(case_dirs, total_cases)
+        _tqdm_launch([str(d) for d in case_dirs], total_cases)
