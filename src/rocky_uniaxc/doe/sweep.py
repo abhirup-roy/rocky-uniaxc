@@ -9,8 +9,9 @@ from typing import Optional
 import jinja2
 
 from . import _tqdm_launch, shapes_module_path
-from ..compr_meshgen import create_meshes_efficiently
+from ..compr_meshgen import create_meshes
 from ..utils import slurm_sbatch, cd
+from .. import BACKEND
 
 """
 This script generates multiple cases for Rocky DEM simulations using a template and a set of parameters.
@@ -100,6 +101,7 @@ def launch_sweep(
     custom_sh: Optional[str] = None,
     target: str = "GPU",
     ncpus: Optional[int] = None,
+    backend: Optional[str] = None,
 ):
     """
     Generate and launch sweep cases
@@ -114,7 +116,13 @@ def launch_sweep(
             the `custom_sh` arg
         custom_sh: A custom SLURM script to run simulations. Only needed if
             using `loc=custom`
+        backend: Which backend to use. Options are 'rocky_prepost' or 'pyrocky'
     """
+    if backend is None:
+        backend = BACKEND
+    if backend not in ["rocky_prepost", "pyrocky"]:
+        raise ValueError("backend must be 'rocky_prepost' or 'pyrocky'")
+
     # Ensure the template directory exists
     if not template_dir:
         pass
@@ -173,7 +181,7 @@ def launch_sweep(
         os.makedirs(shared_mesh_dir, exist_ok=True)
 
         # Generate meshes only once for each unique size
-        create_meshes_efficiently(size, meshsize=0.01, out_dir=shared_mesh_dir)
+        create_meshes(size, meshsize=0.01, out_dir=shared_mesh_dir)
 
         size_to_mesh_dir[size] = shared_mesh_dir
 
@@ -220,12 +228,62 @@ def launch_sweep(
 
         print(params)
 
-        # Render template and write script
-        rendered_content = rocky_template.render(script_contxt)
-        script_path = os.path.join(case_dir, "script_uniax.py")
+        if backend == "rocky_prepost":
+            # Render template and write script
+            rendered_content = rocky_template.render(script_contxt)
+            script_path = os.path.join(case_dir, "script_uniax.py")
+            with open(script_path, "w") as script_file:
+                script_file.write(rendered_content)
+        elif backend == "pyrocky":
+            script_path = os.path.join(case_dir, "script_uniax.py")
+            with open(script_path, "w") as script_file:
+                script_file.write(f"""
+import os
+from rocky_uniaxc.pyrocky.uniax import Settings, UniaxialCompressionSimulation
 
-        with open(script_path, "w") as script_file:
-            script_file.write(rendered_content)
+def run():
+    settings = Settings(
+        project_dir=r"{os.path.abspath(case_dir)}",
+        particle_box_len={script_contxt["L_BOX"]},
+        t_fill=1.0,
+        t_settle=0.5,
+        t_compress=2.0,
+        p_compress={script_contxt["P_COMPRESS"]},
+        
+        p_radius={script_contxt["RADIUS_P"]},
+        p_density={script_contxt["DENSITY_P"]},
+        p_youngmod={script_contxt["YOUNGMOD_P"]},
+        p_poisson={script_contxt["POISSON_P"]},
+        fric_dyn_pp={script_contxt["DYNAMIC_FRICTION_PP"]},
+        fric_stat_pp={script_contxt["STATIC_FRICTION_PP"]},
+        cor_pp={script_contxt["COR_PP"]},
+        fric_dyn_pw={script_contxt["DYNAMIC_FRICTION_PW"]},
+        fric_stat_pw={script_contxt["STATIC_FRICTION_PW"]},
+        cor_pw={script_contxt["COR_PW"]},
+        
+        normal_force_model={repr(script_contxt["NORMAL_MODEL"].strip('"'))},
+        tangential_force_model={repr(script_contxt["TANG_MODEL"].strip('"'))},
+        adhesion_model={repr(script_contxt["ADH_MODEL"].strip('"'))},
+        rolling_fric={script_contxt.get("ROLLING_FRICTION", 0.0)},
+        rolling_model={repr(script_contxt["ROLLING_MODEL"].strip('"'))},
+        
+        processor={repr(script_contxt["XPU"].strip('"'))},
+        mesh_dir=r"{os.path.abspath(os.path.join(case_dir, script_contxt["MESH_DIR"]))}",
+        
+        shape_name={repr(script_contxt["SHAPE"].strip('"'))},
+        vert_ar={script_contxt["VERT_AR"]},
+        horiz_ar={script_contxt["HORIZ_AR"]},
+        n_corners={script_contxt["N_CORNERS"]},
+        sq_degree={script_contxt["SQ_DEGREE"]},
+        particle_path={repr(script_contxt["PARTICLE_PATH"])},
+        smoothness={script_contxt["SMOOTHNESS"]},
+    )
+    sim = UniaxialCompressionSimulation(settings)
+    sim.execute()
+
+if __name__ == "__main__":
+    run()
+""")
 
         # Log case information
         print(f"Case {i}/{total_cases} prepared")
