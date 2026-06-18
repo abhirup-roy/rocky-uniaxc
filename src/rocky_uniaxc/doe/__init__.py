@@ -1,3 +1,9 @@
+"""Design of Experiments (DOE) sub-package for rocky_uniaxc.
+
+Provides job-launching utilities and shared constants for sweep and OFAT
+experiment workflows.
+"""
+
 import pathlib
 import subprocess
 from tqdm import tqdm
@@ -5,7 +11,15 @@ from ..utils import cd
 
 
 def _tqdm_launch(case_dirs, total_cases):
-    """Launch jobs using sbatch with a tqdm progress bar."""
+    """Launch simulation jobs via ``sbatch`` with a tqdm progress bar.
+
+    Args:
+        case_dirs: Iterable of case directory paths.
+        total_cases: Total number of cases (for the progress bar).
+
+    Side Effects:
+        Submits SLURM jobs and prints a summary of any failures.
+    """
     failed_jobs = []
     for i, case_dir in tqdm(
         enumerate(case_dirs), total=total_cases, desc="Submitting Jobs", unit="case"

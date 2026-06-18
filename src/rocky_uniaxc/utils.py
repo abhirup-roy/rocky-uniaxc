@@ -5,7 +5,15 @@ from typing import Optional
 
 
 class cd:
-    """Context manager for changing the current working directory"""
+    """Context manager for temporarily changing the current working directory.
+
+    Usage::
+
+        with cd("/tmp"):
+            # working directory is now /tmp
+            ...
+        # original directory is restored
+    """
 
     def __init__(self, newPath):
         self.newPath = os.path.expanduser(newPath)
@@ -27,9 +35,33 @@ def slurm_sbatch(
     ngpus: int = 1,
     run_days: int = 12,
 ):
-    """
-    Create a slurm sbatch script for each case.
-    Change if needed.
+    """Create a SLURM sbatch script for a simulation case.
+
+    Generates a ``runRocky.sh`` script in the case directory using a template
+    appropriate for the specified cluster location, then optionally launches it
+    via ``sbatch``.
+
+    Args:
+        case_dir: Directory of the case for which to create the sbatch script.
+        loc: Cluster location determining the script template. Accepted values
+            are ``"bb-cpu"`` (BlueBear CPU), ``"bb-gpu"`` (BlueBear GPU),
+            ``"az-gpu"`` (Azure GPU), and ``"custom"``.
+        autolaunch: If ``True``, automatically submit the script via
+            ``sbatch`` after writing it.
+        custom_msg: Custom sbatch script template. Required when
+            ``loc="custom"``. Must start with the shebang line
+            (``#!/bin/bash``).
+        ncpus: Number of CPUs to request. Only applicable when
+            ``loc="bb-cpu"``. Defaults to 20.
+        ngpus: Number of GPUs to request. Only applicable when
+            ``loc="bb-gpu"`` or ``loc="az-gpu"``. Defaults to 1.
+        run_days: Number of days to request for the job runtime. Defaults
+            to 12.
+
+    Raises:
+        ValueError: If ``loc`` is not one of the supported locations, or if
+            ``loc="custom"`` and ``custom_msg`` does not start with
+            ``#!/bin/bash``.
     """
 
     if loc == "bb-cpu" and not ncpus:

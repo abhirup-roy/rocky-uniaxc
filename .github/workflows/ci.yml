@@ -3,9 +3,9 @@ name: Build and Test
 on: [push, pull_request]
 
 jobs:
-  build:
+  test:
     name: continuous-integration
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         python-version:
@@ -16,10 +16,17 @@ jobs:
     env:
       UV_PYTHON: ${{ matrix.python-version }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
+      
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install libgl-dev libglu1-mesa-dev xvfb libxcursor-dev libxinerama-dev
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@v4
+        
       - name: Install package
         run: uv sync --locked --all-extras --dev
+        
+      - name: Run pytest
+        run: uv run pytest
 

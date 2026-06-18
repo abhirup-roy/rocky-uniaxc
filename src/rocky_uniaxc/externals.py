@@ -1,17 +1,30 @@
+"""External file format handlers for Rocky simulation data.
+
+Provides utilities for exporting particle geometries from Rocky as STL,
+converting them to VTK unstructured grids with per-cell data (orientation,
+velocity, etc.), and generating VTK files for visualisation in ParaView.
+"""
+
+from typing import Optional
 import os
-import subprocess
 import tempfile
 from warnings import warn
 import numpy as np
 from stl import mesh
 from evtk import vtk, hl
-import ansys.rocky.core as pyrocky
+from .pyrocky import pyrocky_run
 
 
 def _get_rotation_matrix(vec: np.ndarray) -> np.ndarray:
-    """
-    Compute rotation matrix to align z-axis with the given vector.
-    Using Rodrigues' rotation formula.
+    """Compute a rotation matrix that aligns the z-axis with the given vector.
+
+    Uses Rodrigues' rotation formula.
+
+    Args:
+        vec: A 3-element rotation vector (axis × angle).
+
+    Returns:
+        A 3×3 rotation matrix as a :class:`~numpy.ndarray`.
     """
     angle = np.linalg.norm(vec)
 
@@ -25,7 +38,16 @@ def _get_rotation_matrix(vec: np.ndarray) -> np.ndarray:
 
 
 def _load_particle_stl(file_path: str):
-    """Load particle STL file and return vertices and faces."""
+    """Load a particle STL file and return its vertices and face indices.
+
+    Args:
+        file_path: Path to the STL file.
+
+    Returns:
+        A tuple ``(vertices, faces)`` where ``vertices`` is an
+        ``(N, 3)`` array and ``faces`` is an ``(M, 3)`` array of
+        indices.  Returns ``(None, None)`` on failure.
+    """
     try:
         p_mesh = mesh.Mesh.from_file(file_path)
         verts, inv_idxs = np.unique(
@@ -39,35 +61,25 @@ def _load_particle_stl(file_path: str):
         return None, None
 
 
-def _export_particle_stl(rocky_file: str) -> str:
+def export_particle_stl(project, study) -> str:
+    """Export the first particle's geometry to an STL file.
+
+    Args:
+        project: Rocky project API object.
+        study: Rocky study API object.
+
+    Returns:
+        Path to the exported STL file.
+    """
+
+    study = project.GetStudy()
+    particle = study.GetParticleCollection()[0]
     tempdir = tempfile.mkdtemp(prefix="rocky_particle")
-
-    script_lines = [
-        "import os",
-        f"app.OpenProject(r'{rocky_file}')",
-        "study = app.GetStudy()",
-        "particle = study.GetParticleCollection()[0]",
-        "export_toolkit = study.GetExportToolkit()",
-        f"stl_path = os.path.join(r'{tempdir}', 'particle.stl')",
-        "export_toolkit.ExportParticleToStl(",
-        "    stl_filename=stl_path,",
-        "    particle=particle,",
-        "    time_to_export=-1",
-        ")",
-    ]
-    script = "\n".join(script_lines)
-
-    rocky_dir = os.path.dirname(rocky_file)
-    write_path = os.path.join(rocky_dir, "export_particle_stl.py")
-    with open(write_path, "w") as f:
-        f.write(script)
-
-    cmd = ["Rocky", "--script", write_path, "--headless"]
-    subprocess.run(cmd, cwd=rocky_dir)
     stl_path = os.path.join(tempdir, "particle.stl")
-
-    if not os.path.exists(stl_path):
-        raise FileNotFoundError(f"Failed to export particle STL to {stl_path}")
+    export_toolkit = study.GetExportToolkit()
+    export_toolkit.ExportParticleToStl(
+        stl_filename=stl_path, particle=particle, time_to_export=-1
+    )
 
     return stl_path
 
@@ -81,8 +93,20 @@ def _vtk_gen(
     residence_times: np.ndarray,
     output_vtk_path: str,
 ):
-    """
-    Convert STL particle data and positions to VTK format.
+    """Convert STL particle data and per-particle attributes to VTK format.
+
+    Instantiates the template mesh at each particle position with the
+    correct rotation and writes an unstructured-grid VTK file with
+    per-cell data (orientation, velocity, etc.).
+
+    Args:
+        stl_path: Path to the template particle STL file.
+        positions: ``(N, 3)`` array of particle positions.
+        orientations: ``(N, 3)`` array of rotation vectors.
+        trans_vel_data: ``(N, 3)`` array of translational velocities.
+        rotat_vel_data: ``(N, 3)`` array of rotational velocities.
+        residence_times: ``(N,)`` array of residence times.
+        output_vtk_path: Output path for the VTK file (without extension).
     """
     template_verts, template_faces = _load_particle_stl(stl_path)
     if template_verts is None or template_faces is None:
@@ -199,125 +223,108 @@ def _vtk_gen(
     print("VTK file written successfully.")
 
 
-def generate_vtk(
-    rocky_filepath: str | list, rocky_exe: str = None, output_dir: str | list = None
-):
+@pyrocky_run()
+def generate_vtk(rocky, rocky_filepath: str, output_dir: str):
+    """Generate VTK files for particle data at every saved time step.
+
+    Reads particle positions, orientations, translational and rotational
+    velocities from a Rocky project and writes one VTK unstructured-grid
+    file per time step.
+
+    Args:
+        rocky: Rocky API session (injected by
+            :class:`~rocky_uniaxc.pyrocky.helpers.pyrocky_run`).
+        rocky_filepath: Path to the Rocky project file (``.rocky``).
+        output_dir: Directory where the VTK files will be saved.
+
+    Raises:
+        FileNotFoundError: If the Rocky project file does not exist.
+        ValueError: If the file is not a valid ``.rocky`` project file.
+    """
     if not os.path.isfile(rocky_filepath):
         raise FileNotFoundError(f"Rocky file not found: {rocky_filepath}")
     if not rocky_filepath.endswith(".rocky"):
         raise ValueError(f"Invalid Rocky file: {rocky_filepath}")
 
-    if not rocky_exe:
-        rocky_exe = subprocess.run(["which", "Rocky"], capture_output=True)
-        rocky_exe = rocky_exe.stdout.decode().strip()
-
     os.makedirs(output_dir, exist_ok=True)
 
     tempdir = os.path.join(os.getcwd(), "pyrocky_temp")
     os.makedirs(tempdir, exist_ok=True)
-    rocky = pyrocky.launch_rocky(rocky_exe=rocky_exe)
 
-    if isinstance(rocky_filepath, str):
-        rocky_filepath = [rocky_filepath]
-    if isinstance(output_dir, str):
-        output_dir = [output_dir]
+    if not os.path.isfile(rocky_filepath):
+        raise FileNotFoundError(f"Rocky file not found: {rocky_filepath}")
+    project = rocky.api.OpenProject(rocky_filepath)
+    study = project.GetStudy()
 
-    if len(rocky_filepath) != len(output_dir):
-        raise ValueError("rocky_filepath and output_dir must have the same length.")
+    particle_path = export_particle_stl(project, study)
+    particles = study.GetParticles()
 
-    print(rocky_filepath)
-    particle_paths = [
-        _export_particle_stl(os.path.join(os.getcwd(), f)) for f in rocky_filepath
-    ]
-
-    for i, rocky_file in enumerate(rocky_filepath):
-        if not os.path.isfile(rocky_file):
-            raise FileNotFoundError(f"Rocky file not found: {rocky_file}")
-        project = rocky.api.OpenProject(rocky_file)
-        study = project.GetStudy()
-
-        particles = study.GetParticles()
-        particle = study.GetParticleCollection()[0]
-        particle_stl_path = os.path.join(tempdir, "particle.stl")
-        export_toolkit = study.GetExportToolkit()
-        export_toolkit.ExportParticleToStl(
-            stl_filename=particle_stl_path, particle=particle, time_to_export=-1
+    timeset = study.GetTimeSet()
+    for idx, t in enumerate(timeset):
+        if particles.GetNumberOfParticles(time_step=idx) == 0:
+            print(f"No particles at time {t:.2f}s, skipping VTK generation.")
+            continue
+        positions = np.vstack(
+            [
+                particles.GetGridFunction("Coordinate : X").GetArray(time_step=idx),
+                particles.GetGridFunction("Coordinate : Y").GetArray(time_step=idx),
+                particles.GetGridFunction("Coordinate : Z").GetArray(time_step=idx),
+            ]
+        ).transpose()
+        orients = np.vstack(
+            [
+                particles.GetGridFunction("Orientation : Vector : X").GetArray(
+                    time_step=idx
+                ),
+                particles.GetGridFunction("Orientation : Vector : Y").GetArray(
+                    time_step=idx
+                ),
+                particles.GetGridFunction("Orientation : Vector : Z").GetArray(
+                    time_step=idx
+                ),
+            ]
+        ).transpose()
+        trans_vels = np.vstack(
+            [
+                particles.GetGridFunction("Velocity : Translational : X").GetArray(
+                    time_step=idx
+                ),
+                particles.GetGridFunction("Velocity : Translational : Y").GetArray(
+                    time_step=idx
+                ),
+                particles.GetGridFunction("Velocity : Translational : Z").GetArray(
+                    time_step=idx
+                ),
+            ]
+        ).transpose()
+        rotat_vels = np.vstack(
+            [
+                particles.GetGridFunction("Velocity : Rotational : X").GetArray(
+                    time_step=idx
+                ),
+                particles.GetGridFunction("Velocity : Rotational : Y").GetArray(
+                    time_step=idx
+                ),
+                particles.GetGridFunction("Velocity : Rotational : Z").GetArray(
+                    time_step=idx
+                ),
+            ]
+        ).transpose()
+        residence_times = particles.GetGridFunction("Residence Time").GetArray(
+            time_step=idx
         )
-        # if not os.path.exists(particle_stl_path):
-        #     rocky.close()
-        #     raise FileNotFoundError(
-        #         f"Failed to export particle STL to {particle_stl_path}"
-        #     )
-        timeset = study.GetTimeSet()
-        for idx, t in enumerate(timeset):
-            if particles.GetNumberOfParticles(time_step=idx) == 0:
-                print(f"No particles at time {t:.2f}s, skipping VTK generation.")
-                continue
-            positions = np.vstack(
-                [
-                    particles.GetGridFunction("Coordinate : X").GetArray(time_step=idx),
-                    particles.GetGridFunction("Coordinate : Y").GetArray(time_step=idx),
-                    particles.GetGridFunction("Coordinate : Z").GetArray(time_step=idx),
-                ]
-            ).transpose()
-            orients = np.vstack(
-                [
-                    particles.GetGridFunction("Orientation : Vector : X").GetArray(
-                        time_step=idx
-                    ),
-                    particles.GetGridFunction("Orientation : Vector : Y").GetArray(
-                        time_step=idx
-                    ),
-                    particles.GetGridFunction("Orientation : Vector : Z").GetArray(
-                        time_step=idx
-                    ),
-                ]
-            ).transpose()
-            trans_vels = np.vstack(
-                [
-                    particles.GetGridFunction("Velocity : Translational : X").GetArray(
-                        time_step=idx
-                    ),
-                    particles.GetGridFunction("Velocity : Translational : Y").GetArray(
-                        time_step=idx
-                    ),
-                    particles.GetGridFunction("Velocity : Translational : Z").GetArray(
-                        time_step=idx
-                    ),
-                ]
-            ).transpose()
-            rotat_vels = np.vstack(
-                [
-                    particles.GetGridFunction("Velocity : Rotational : X").GetArray(
-                        time_step=idx
-                    ),
-                    particles.GetGridFunction("Velocity : Rotational : Y").GetArray(
-                        time_step=idx
-                    ),
-                    particles.GetGridFunction("Velocity : Rotational : Z").GetArray(
-                        time_step=idx
-                    ),
-                ]
-            ).transpose()
-            residence_times = particles.GetGridFunction("Residence Time").GetArray(
-                time_step=idx
-            )
-            output_vtk_path = os.path.join(
-                output_dir[i],
-                f"particles_t{t:.2f}",
-            )
-            print(particle_paths)
-            print(i)
-            print(particle_paths[i])
-            _vtk_gen(
-                stl_path=particle_paths[i],
-                positions=positions,
-                orientations=orients,
-                trans_vel_data=trans_vels,
-                rotat_vel_data=rotat_vels,
-                residence_times=residence_times,
-                output_vtk_path=output_vtk_path,
-            )
-        project.CloseProject(check_save_state=False)
-    print("tempfile dir: ", tempdir)
-    rocky.close()
+        output_vtk_path = os.path.join(
+            output_dir,
+            f"particles_t{t:.2f}",
+        )
+
+        _vtk_gen(
+            stl_path=particle_path,
+            positions=positions,
+            orientations=orients,
+            trans_vel_data=trans_vels,
+            rotat_vel_data=rotat_vels,
+            residence_times=residence_times,
+            output_vtk_path=output_vtk_path,
+        )
+    project.CloseProject(check_save_state=False)

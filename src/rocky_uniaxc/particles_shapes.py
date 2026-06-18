@@ -1,7 +1,45 @@
+"""Wrapper classes for particle shapes in Ansys Rocky.
+
+Provides a base :class:`Shape` class and specialised subclasses that map
+to Rocky DEM particle types.  Each subclass stores shape-specific parameters
+and can apply them to a Rocky particle via :meth:`Shape.particle2rocky`.
+"""
+
 import os
 
 
 class Shape:
+    """Base class for particle shapes in Ansys Rocky.
+
+    Not intended to be instantiated directly — use one of the subclasses
+    (:class:`Sphere`, :class:`Polyhedron`, etc.) instead.
+
+    Args:
+        shape_type: Rocky shape identifier string (e.g. ``"sphere"``,
+            ``"polyhedron"``).
+        radius: Particle radius in metres, or a dict mapping radii to
+            cumulative percentages for polydisperse distributions.
+        vert_ar: Vertical aspect ratio.
+        horiz_ar: Horizontal aspect ratio.
+        smoothness: Surface smoothness.
+        n_corners: Number of corners for polygonal shapes.
+        sq_degree: Superquadric degree.
+        size_type: Size specification mode.
+
+    Raises:
+        ValueError: If ``shape_type`` or ``size_type`` is unrecognised.
+
+    Attributes:
+        shape_type: Rocky shape identifier.
+        radius: Particle radius or size distribution.
+        vert_ar: Vertical aspect ratio.
+        horiz_ar: Horizontal aspect ratio.
+        smoothness: Surface smoothness.
+        n_corners: Number of corners.
+        sq_degree: Superquadric degree.
+        size_type: Size specification mode.
+    """
+
     def __init__(
         self,
         shape_type: str,
@@ -13,15 +51,19 @@ class Shape:
         sq_degree: float | None = None,
         size_type: str = "equivalent_diameter",
     ) -> None:
-        """
-        Base shape class for Rocky DEM particles.
-        Parameters:
-            radius (float | dict[float, float] | None): Radius of the particle or a dictionary with PSD.
-            vert_ar (float | None): Vertical aspect ratio.
-            horiz_ar (float | None): Horizontal aspect ratio.
-            smoothness (float | None): Smoothness of the particle surface.
-            n_corners (int | None): Number of corners for polygonal shapes.
-            sq_degree (float | None): Superquadric degree for square-like shapes.
+        """Initialise the base shape parameters.
+
+        Args:
+            shape_type: Rocky shape identifier string.
+            radius: Particle radius (m) or a dict mapping radii to
+                cumulative percentages.
+            vert_ar: Vertical aspect ratio.
+            horiz_ar: Horizontal aspect ratio.
+            smoothness: Surface smoothness.
+            n_corners: Number of corners for polygonal shapes.
+            sq_degree: Superquadric degree.
+            size_type: Size specification mode — ``"sieve"``,
+                ``"equivalent_diameter"``, or ``"original_size_scale"``.
         """
         self.radius = radius
         self.vert_ar = vert_ar
@@ -54,12 +96,19 @@ class Shape:
             self.size_type = size_type
 
     def particle2rocky(self, particle, material, rolling_friction: float = 0.0) -> None:
-        """Set the particle size distribution for the shape.
-        Parameters:
-            radius (float | dict[float, float]): Radius of the particle or a dictionary with
-                particle sizes and their proportions.
-            material (str): Material of the particle.
-            rolling_friction (str): Rolling friction type. Default is 'none'."""
+        """Apply this shape's parameters to a Rocky particle object.
+
+        Sets the size distribution, material, shape type, and optional
+        aspect-ratio / smoothness properties on the given particle.
+
+        Args:
+            particle: A Rocky particle API object.
+            material: Material proxy for the particle.
+            rolling_friction: Rolling friction coefficient. Defaults to 0.0.
+
+        Raises:
+            TypeError: If ``radius`` is not a float, int, or dict.
+        """
 
         if isinstance(self.radius, float) or isinstance(self.radius, int):
             size_distr_lst = particle.GetSizeDistributionList()
@@ -122,12 +171,31 @@ class Shape:
 
 
 class Sphere(Shape):
+    """Spherical particle shape.
+
+    Args:
+        radius: Particle radius (m) or a dict mapping radii to
+            cumulative percentages.
+    """
+
     def __init__(self, radius: float | dict[float, float]) -> None:
         super().__init__(shape_type="sphere", radius=radius)
         self.radius = radius
 
 
 class Polyhedron(Shape):
+    """Polyhedral particle shape.
+
+    Args:
+        radius: Particle radius (m) or a dict mapping radii to
+            cumulative percentages.
+        vert_ar: Vertical aspect ratio.
+        horiz_ar: Horizontal aspect ratio.
+        n_corners: Number of corners.
+        superquadric_degree: Superquadric degree controlling corner
+            sharpness.
+    """
+
     def __init__(
         self,
         radius: float | dict[float, float],
@@ -152,13 +220,30 @@ class Polyhedron(Shape):
 
 
 class SpheroCylinder(Shape):
-    """Sphero-cylinder shape for Rocky DEM particles."""
+    """Sphero-cylinder particle shape.
+
+    Args:
+        radius: Particle radius (m) or a dict mapping radii to
+            cumulative percentages.
+        vert_ar: Vertical aspect ratio (length-to-diameter ratio).
+    """
 
     def __init__(self, radius: float | dict[float, float], vert_ar: float) -> None:
         super().__init__(shape_type="sphero_cylinder", radius=radius, vert_ar=vert_ar)
 
 
 class CustomPolyhedron(Shape):
+    """Custom polyhedron shape defined by an STL file.
+
+    Args:
+        stl_path: Path to the STL file defining the particle geometry.
+        radius: Particle radius (m) or a dict mapping radii to
+            cumulative percentages.
+
+    Raises:
+        FileNotFoundError: If the STL file does not exist.
+    """
+
     def __init__(self, stl_path: str, radius: float | dict[float, float]) -> None:
         stl_path = os.path.abspath(stl_path)
         if not os.path.exists(stl_path):
@@ -168,6 +253,20 @@ class CustomPolyhedron(Shape):
         self.radius = radius
 
     def particle2rocky(self, particle, material, rolling_friction: float = 0.0):
+        """Apply the custom polyhedron shape to a Rocky particle.
+
+        Imports the STL geometry and assigns the material and rolling
+        friction.
+
+        Args:
+            particle: A Rocky particle API object.
+            material: Material proxy for the particle.
+            rolling_friction: Rolling friction coefficient. Defaults to 0.0.
+
+        Raises:
+            ValueError: If no material is provided.
+            TypeError: If ``radius`` is not a float, int, or dict.
+        """
         particle.ImportFromSTL(stl_filename=self.stl_path, scale=1.0)
         if material:
             particle.SetMaterial(material)

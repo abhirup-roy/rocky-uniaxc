@@ -1,72 +1,57 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-import os
+"""Full-factorial parameter sweep generation and execution.
+
+Reads a JSON configuration specifying parameter ranges, computes all
+combinations via the Cartesian product, generates case directories, mesh
+files, simulation scripts, and SLURM submission scripts, and optionally
+launches the jobs.
+"""
+
 import json
+import logging
+import os
 from collections import OrderedDict
 import itertools
+from pathlib import Path
 from typing import Optional
 
 import jinja2
 
 from . import _tqdm_launch, shapes_module_path
-from ..compr_meshgen import create_meshes_efficiently
-from ..utils import slurm_sbatch, cd
+from ._doe_utils import (
+    SimParams,
+    ShapeConfig,
+    case_directory,
+    script_context_from_params,
+    get_unique_box_lens,
+    prepare_case,
+)
+from ..compr_meshgen import create_meshes
+from ..utils import slurm_sbatch
 
-"""
-This script generates multiple cases for Rocky DEM simulations using a template and a set of parameters.
-It creates a directory for each case, populates the template with parameters, and generates the necessary mesh files.
-It also creates a slurm sbatch script for each case and can automatically launch the job on a slurm cluster.
-It uses the jinja2 library for templating and the gmsh library for mesh generation.
-
-The script uses a JSON file to define the parameters for the simulations.
-The parameters include properties of the particles, interactions, and experimental settings.
-The script iterates over all combinations of parameters, creating a case directory for each combination.
-
-Example usage:
-    from rocky_sweep import make_cases
-    make_cases(
-        meshdir='meshes',
-        json_path='params.json',
-        template_dir='templates',
-        autolaunch=True
-    )
-"""
+logger = logging.getLogger(__name__)
 
 
-def iter_params(json_path: str):
-    """
-    Iterate over all parameter combinations.
+def iter_params(json_path: str) -> list[SimParams]:
+    """Read a sweep JSON configuration and expand all parameter combinations.
 
     Args:
-        json_path: Path to json config for sweep
+        json_path: Path to the JSON configuration file defining parameter
+            ranges for the sweep.
+
+    Returns:
+        List of :class:`~rocky_uniaxc.doe._doe_utils.SimParams` instances,
+        one per parameter combination.
     """
-    # Load the JSON file
     with open(json_path, "r") as f_params:
         params = json.load(f_params, object_pairs_hook=OrderedDict)
 
-    # Handle shape parameters - now it's an array of shape objects
     shape_list = params["shape"]
     if not isinstance(shape_list, list):
         shape_list = [shape_list]
 
-    # Extract all possible values for each shape parameter
-    shape_names = []
-    vert_ars = []
-    horiz_ars = []
-    n_corners_list = []
-    sq_degrees = []
-    particle_paths = []
+    shape_configs = [ShapeConfig.from_dict(s) for s in shape_list]
+    logger.debug("Loaded %d shape configurations", len(shape_configs))
 
-    for shape in shape_list:
-        print(shape)
-        shape_names.append(shape.get("name", "sphere"))
-        vert_ars.append(shape.get("vert_ar", 1.0))
-        horiz_ars.append(shape.get("horiz_ar", 1.0))
-        n_corners_list.append(shape.get("n_corners", 6))
-        sq_degrees.append(shape.get("sq_degree", 1.0))
-        particle_paths.append(shape.get("particle_path", ""))
-
-    # Find all combinations of parameters
     param_combinations = itertools.product(
         params["particle_properties"]["radius"],
         params["particle_properties"]["density"],
@@ -87,40 +72,65 @@ def iter_params(json_path: str):
         params["contact_model"]["adhesion"],
         shape_list,
     )
-    return param_combinations
+
+    return [
+        SimParams.from_tuple(combo[:17], shape=combo[17])
+        for combo in param_combinations
+    ]
 
 
 def launch_sweep(
     sweep_name: str,
     json_path: str,
     meshdir: str = "meshes",
-    template_dir: Optional[str] = None,
+    template_dir: Optional[str | os.PathLike] = None,
     autolaunch=True,
     loc: str = "bb-gpu",
     custom_sh: Optional[str] = None,
     target: str = "GPU",
     ncpus: Optional[int] = None,
+    backend: Optional[str] = None,
 ):
-    """
-    Generate and launch sweep cases
+    """Generate and launch a full-factorial parameter sweep.
+
+    Reads parameter ranges from a JSON configuration, computes all
+    combinations, creates case directories with simulation scripts and SLURM
+    submission files, and optionally submits the jobs.
 
     Args:
-        sweep_name: A string for the title of the sweep being carried out
-        json_path: A path to the json config for the sweep or simulation
-        template_dir: A path to the script templates
-        autolaunch: Whether to automatically launch scripts
-        loc: Specify cluster script to use. Currently only works with
-            'az-gpu', 'bb-cpu', 'custom'. N.B. If using custom, specify
-            the `custom_sh` arg
-        custom_sh: A custom SLURM script to run simulations. Only needed if
-            using `loc=custom`
+        sweep_name: Title of the sweep, used as the root directory name.
+        json_path: Path to the JSON configuration file defining parameter
+            ranges.
+        meshdir: Name of the mesh subdirectory inside each case. Defaults to
+            ``"meshes"``.
+        template_dir: Optional path to a directory containing custom Jinja2
+            templates. Defaults to the package's built-in templates.
+        autolaunch: Whether to automatically submit SLURM jobs after setup.
+            Defaults to ``True``.
+        loc: Cluster location for SLURM scripts. Accepted values are
+            ``"bb-gpu"``, ``"bb-cpu"``, ``"az-gpu"``, and ``"custom"``.
+        custom_sh: Custom SLURM script content. Only used when
+            ``loc="custom"``.
+        target: Compute target — ``"CPU"`` or ``"GPU"``. Defaults to
+            ``"GPU"``.
+        ncpus: Number of CPUs to request (CPU target only).
+        backend: Simulation backend — ``"rocky_prepost"`` or ``"pyrocky"``.
+            Defaults to the package-level :data:`BACKEND` setting.
+
+    Raises:
+        ValueError: If an unsupported backend, target, or location is
+            specified.
+        FileNotFoundError: If ``template_dir`` does not exist.
     """
-    # Ensure the template directory exists
-    if not template_dir:
-        pass
-    else:
-        template_dir = os.path.abspath(template_dir)
-        if not os.path.exists(template_dir):
+    if backend is None:
+        from .. import BACKEND
+        backend = BACKEND
+    if backend not in ["rocky_prepost", "pyrocky"]:
+        raise ValueError("backend must be 'rocky_prepost' or 'pyrocky'")
+
+    if template_dir:
+        template_dir = Path(template_dir).resolve()
+        if not template_dir.exists():
             raise FileNotFoundError(f"Directory {template_dir} does not exist.")
 
     target = target.upper()
@@ -131,137 +141,71 @@ def launch_sweep(
 
     if (loc == "bb-cpu" and target == "GPU") or (loc == "az-gpu" and target == "CPU"):
         raise ValueError(f"{target} is not valid for location {loc}")
-    target = '"' + target + '"'
-    # Load template once
 
+    target_quoted = f'"{target}"'
+
+    # Load template
     if not template_dir:
         rocky_templ_env = jinja2.Environment(
             loader=jinja2.PackageLoader("rocky_uniaxc", "templates"),
         )
     else:
         rocky_templ_env = jinja2.Environment(
-            loader=jinja2.FileSystemLoader(f"{template_dir}")
+            loader=jinja2.FileSystemLoader(str(template_dir))
         )
     rocky_template = rocky_templ_env.get_template("template_uniax.py")
 
-    # Get all parameter combinations
     all_params = list(iter_params(json_path))
     total_cases = len(all_params)
-    print(f"Setting up {total_cases} cases...")
+    logger.info("Setting up %d cases...", total_cases)
 
-    # Create the sweep directory
-    os.makedirs(sweep_name, exist_ok=True)
+    sweep_path = Path(sweep_name)
+    sweep_path.mkdir(exist_ok=True)
 
-    # Create directories for all cases first (parallel processing preparation)
     case_dirs = []
     for i in range(total_cases):
-        case_dir = os.path.join(sweep_name, f"case_{i}")
-        os.makedirs(case_dir, exist_ok=True)
-        os.makedirs(os.path.join(case_dir, "plots"), exist_ok=True)
-        os.makedirs(os.path.join(case_dir, meshdir), exist_ok=True)
-        case_dirs.append(case_dir)
+        case_dirs.append(sweep_path / f"case_{i}")
 
-    # Generate meshes only once per unique size
-    # This is a major optimization - don't recreate identical meshes
-    unique_sizes = set([params[11] for params in all_params])  # Box length parameter
+    unique_sizes = get_unique_box_lens(all_params)
+    logger.info("Generating meshes for %d unique sizes...", len(unique_sizes))
+
     size_to_mesh_dir = {}
-
-    print(f"Generating meshes for {len(unique_sizes)} unique sizes...")
     for size in unique_sizes:
-        # Create a shared mesh directory for this size
-        shared_mesh_dir = os.path.join(sweep_name, f"meshes_{size}")
-        os.makedirs(shared_mesh_dir, exist_ok=True)
-
-        # Generate meshes only once for each unique size
-        create_meshes_efficiently(size, meshsize=0.01, out_dir=shared_mesh_dir)
-
+        shared_mesh_dir = sweep_path / f"meshes_{size}"
+        shared_mesh_dir.mkdir(parents=True, exist_ok=True)
+        create_meshes(size, meshsize=0.01, out_dir=str(shared_mesh_dir))
         size_to_mesh_dir[size] = shared_mesh_dir
 
-    # Write scripts and prepare to launch
-    print("Generating scripts and preparing jobs...")
+    logger.info("Generating scripts and preparing jobs...")
     for i, params in enumerate(all_params):
         case_dir = case_dirs[i]
-        print(params)
 
-        # Prepare script context
-        script_contxt = {
-            "RADIUS_P": params[0],
-            "DENSITY_P": params[1],
-            "POISSON_P": params[2],
-            "YOUNGMOD_P": params[3],
-            "DYNAMIC_FRICTION_PP": params[4],
-            "STATIC_FRICTION_PP": params[5],
-            "COR_PP": params[7],
-            "DYNAMIC_FRICTION_PW": params[8],
-            "STATIC_FRICTION_PW": params[9],
-            "COR_PW": params[10],
-            "L_BOX": params[11],
-            "P_COMPRESS": params[12],
-            "NORMAL_MODEL": params[13],
-            "TANG_MODEL": params[14],
-            "ROLLING_MODEL": params[15],
-            "ADH_MODEL": params[16],
-            "SHAPE": params[-1].get(
-                "name", "sphere"
-            ),  # Use the name from the shape object
-            "VERT_AR": params[-1].get("vert_ar", 0.5),
-            "HORIZ_AR": params[-1].get("horiz_ar", 1.0),
-            "N_CORNERS": int(params[-1].get("n_corners", 8)),
-            "SQ_DEGREE": params[-1].get("sq_degree", 2.0),
-            "PARTICLE_PATH": params[-1].get("particle_path", ""),
-            "SMOOTHNESS": params[-1].get("smoothness", 0.5),
-            "MESH_DIR": str(meshdir),
-            "XPU": target,
-            "SHAPES_MODULE_PATH": shapes_module_path,
-        }
+        with case_directory(sweep_path, i, meshdir):
+            pass
 
-        if params[15] != '"none"':
-            script_contxt["ROLLING_FRICTION"] = params[6]
+        script_contxt = script_context_from_params(params, target_quoted, meshdir)
+        script_contxt["SHAPES_MODULE_PATH"] = shapes_module_path
+        prepare_case(
+            case_dir,
+            script_contxt,
+            backend,
+            rocky_template,
+            mesh_path=size_to_mesh_dir[params.box_len],
+        )
 
-        print(params)
+        logger.debug("Case %d prepared: %s", i, params.shape.name)
 
-        # Render template and write script
-        rendered_content = rocky_template.render(script_contxt)
-        script_path = os.path.join(case_dir, "script_uniax.py")
-
-        with open(script_path, "w") as script_file:
-            script_file.write(rendered_content)
-
-        # Log case information
-        print(f"Case {i}/{total_cases} prepared")
-
-        # Create SLURM script
         slurm_sbatch(
-            case_dir, loc=loc, autolaunch=False, custom_msg=custom_sh, ncpus=ncpus
-        )  # Don't launch yet
+            str(case_dir),
+            loc=loc,
+            autolaunch=False,
+            custom_msg=custom_sh,
+            ncpus=ncpus,
+        )
 
-    # Launch all cases at once if requested
+        logger.info("Case %d/%d prepared", i + 1, total_cases)
+
+    logger.info("\nAll cases:\n%s", all_params)
+
     if autolaunch:
-        _tqdm_launch(case_dirs, total_cases)
-
-
-if __name__ == "__main__":
-    """Example of a regular sweep"""
-    # make_cases(
-    #     sweep_name='reg_sweep_example',
-    #     json_path='json/swesp_reg.json',
-    #     autolaunch=True,
-    #     loc='az-gpu',
-    #     target='GPU'
-    # )
-
-    """Example of an OFAT sweep"""
-    # launch_ofat(
-    #     'ofat_example',
-    #     autolaunch=True,
-    #     json_path='json/ofat_base.json',
-    #     ofat_values={
-    #         'parameters':['n_corners', 'sq_degree'],
-    #         'test_range':[(5, 50), (2.0, 10.0)],
-    #         'hold_values': ['m', 'm']
-    #     },
-    #     n_points=5,
-    #     loc='az-gpu',
-    #     target='GPU',
-    #     ncpus=20
-    # )
+        _tqdm_launch([str(d) for d in case_dirs], total_cases)

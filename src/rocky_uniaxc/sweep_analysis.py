@@ -1,5 +1,9 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+"""Post-processing and analysis tools for uniaxial compression sweep results.
+
+Provides utilities for loading, filtering, and exporting simulation data from
+SQLite databases, as well as functions for identifying faulty runs and
+repeating sweeps.
+"""
 
 import glob
 import shutil
@@ -15,6 +19,18 @@ PWD = os.getcwd()
 
 
 def load_data(sweep_name: str) -> pd.DataFrame:
+    """Load the results DataFrame from the ``results.db`` SQLite database.
+
+    Args:
+        sweep_name: Name of the sweep directory containing ``results.db``.
+
+    Returns:
+        A :class:`~pandas.DataFrame` with the query results, indexed by
+        ``id``.
+
+    Raises:
+        FileNotFoundError: If the database file does not exist.
+    """
     db_path = os.path.join(PWD, sweep_name, "results.db")
 
     if not os.path.isfile(db_path):
@@ -28,6 +44,15 @@ def load_data(sweep_name: str) -> pd.DataFrame:
 
 
 def _write_df_file(df: pd.DataFrame, name: str, filetype: str, s_dir: str):
+    """Write a DataFrame to a file in the specified directory and format.
+
+    Args:
+        df: The DataFrame to write.
+        name: Base filename (without extension).
+        filetype: Output format — ``"csv"``, ``"parquet"``, ``"feather"``,
+            or ``"excel"``.
+        s_dir: Directory to write the file into.
+    """
     if filetype == "csv":
         df.to_csv(os.path.join(s_dir, f"{name}.csv"))
     elif filetype == "parquet":
@@ -44,17 +69,15 @@ def dump_results(
     outputs_dir: str = "pyoutputs",
     minimal: bool = False,
 ):
-    """
-    Dump the results DataFrame to a specified file format in the outputs directory.
+    """Export the results DataFrame to a file in the outputs directory.
 
-    Parameters
-    ----------
-    sweep_name : str
-        Name of the sweep directory containing the results database.
-    filetype : str, optional
-        The file format to dump the results. Options are 'csv', 'parquet', 'feather'.
-    outputs_dir : str, optional
-        The directory within the sweep directory to save the output files.
+    Args:
+        sweep_name: Name of the sweep directory containing ``results.db``.
+        filetype: Output format — ``"csv"``, ``"parquet"``, or
+            ``"feather"``. Defaults to ``"csv"``.
+        outputs_dir: Subdirectory within the sweep directory to save the
+            file. Defaults to ``"pyoutputs"``.
+        minimal: If ``True``, drop columns with only one unique value.
     """
     outputs_dir_path = os.path.join(PWD, sweep_name, outputs_dir)
     if not os.path.isdir(outputs_dir):
@@ -77,6 +100,17 @@ def dump_results(
 
 
 def find_faulty_runs(sweep_name: str, dump: bool = False):
+    """Scan case directories for potentially faulty simulation results.
+
+    Checks for Hausner ratios outside the typical range of 1–3 and scans
+    SLURM output files for warnings about particle loss.  Results are
+    printed and optionally dumped to a text file.
+
+    Args:
+        sweep_name: Name of the sweep directory to scan.
+        dump: If ``True``, write the list of faulty cases to
+            ``faulty_cases.txt`` in the sweep directory.
+    """
     sweep_dir = os.path.join(PWD, sweep_name)
     # Get all subdirectories that start with 'case_'
     case_dirs = [
@@ -132,18 +166,20 @@ def find_faulty_runs(sweep_name: str, dump: bool = False):
 
 
 def dump_results_backup(sweep_name: str, filetype: str = "csv", minimal: bool = False):
-    """
-    Fallback alternative to dump all results from individual case directories into a single file.
-    Uses results.csv files in each case directory and combines them into one DataFrame.
+    """Fallback export that combines individual ``results.csv`` files.
 
-    Parameters
-    ----------
-    sweep_name : str
-        Name of the sweep directory containing case subdirectories.
-    filetype : str, optional
-        The file format to dump the results. Options are 'csv', 'parquet', 'feather', 'excel'.
-    minimal : bool, optional
-        If True, only include columns with more than one unique value.
+    Reads the per-case ``results.csv`` files and concatenates them into a
+    single DataFrame, then writes the result to the sweep directory.
+
+    Args:
+        sweep_name: Name of the sweep directory containing ``case_*``
+            subdirectories.
+        filetype: Output format — ``"csv"``, ``"parquet"``, ``"feather"``,
+            or ``"excel"``. Defaults to ``"csv"``.
+        minimal: If ``True``, drop columns with only one unique value.
+
+    Raises:
+        NotADirectoryError: If the sweep directory does not exist.
     """
     sweep_dir = os.path.join(PWD, sweep_name)
     if not os.path.isdir(sweep_dir):
@@ -170,18 +206,14 @@ def dump_results_backup(sweep_name: str, filetype: str = "csv", minimal: bool = 
 
     _write_df_file(all_df, name="all_results", filetype=filetype, s_dir=sweep_dir)
 
+
 def _insert_line_in_file(file_path: str, match_str: str, new_line: str):
-    """
-    Reads a file, finds the line containing match_str, and inserts new_line 
-    below it with the same indentation.
-    Parameters
-    ----------
-    file_path : str
-        Path to the file to modify.
-    match_str : str
-        The string to search for in the file.
-    new_line : str
-        The line to insert below the matched line.
+    """Insert a line into a file below a matching line, preserving indentation.
+
+    Args:
+        file_path: Path to the file to modify.
+        match_str: Substring to search for in existing lines.
+        new_line: Text to insert below the matched line.
     """
     with open(file_path, "r") as f:
         lines = f.readlines()
@@ -195,16 +227,34 @@ def _insert_line_in_file(file_path: str, match_str: str, new_line: str):
                 indent = line[: len(line) - len(line.lstrip())]
                 f.write(f"{indent}{new_line}\n")
                 modified = True
-    
+
     if not modified:
         print(f"Warning: Could not find match '{match_str}' in {file_path}")
     else:
         print(f"Successfully modified {file_path}")
 
-def repeat_sweep(sweep_name:str, n_repeats: int, autolaunch: bool = True):
-    """
-    Repeat the sweep by duplicating existing case directories 
-    with new case numbers.
+
+def repeat_sweep(sweep_name: str, n_repeats: int, autolaunch: bool = True):
+    """Repeat a sweep by duplicating case directories with new case numbers.
+
+    Creates new directories for each repeat, copies the existing case
+    directories into them, and modifies ``script_uniax.py`` files to enable
+    random orientation.  Existing ``.rocky``, slurm output, and log files
+    are deleted to ensure a clean slate.  If ``autolaunch`` is ``True``,
+    the simulations are automatically submitted via ``sbatch``.
+
+    .. note::
+       Only sweeps originally generated via the ``rocky_prepost`` backend
+       are currently supported.
+
+    Args:
+        sweep_name: Name of the existing sweep directory to repeat.
+        n_repeats: Number of times to repeat the sweep.
+        autolaunch: If ``True``, automatically submit SLURM jobs after
+            setup. Defaults to ``True``.
+
+    Raises:
+        NotADirectoryError: If the sweep directory does not exist.
     """
     # Resolve absolute path to handle trailing slashes and relative paths correctly
     sweep_path = os.path.abspath(sweep_name)
@@ -216,37 +266,28 @@ def repeat_sweep(sweep_name:str, n_repeats: int, autolaunch: bool = True):
 
     current_repeat = 0
     while current_repeat < n_repeats:
-
         # Construct new path using the parent directory and clean base name
-        new_dir = os.path.join(parent_dir, f"{base_name}_repeat_{current_repeat+1}")
-        
+        new_dir = os.path.join(parent_dir, f"{base_name}_repeat_{current_repeat + 1}")
+
         # Copy files
         if os.path.exists(new_dir):
             shutil.rmtree(new_dir)
         shutil.copytree(sweep_path, new_dir)
-        
+
         current_repeat += 1
-        
+
         # Delete simulation files for all cases in the new sweep
-        rocky_files = glob.glob(
-            os.path.join(new_dir, "case_*", "*.rocky*")
-        )
-        slurm_files = glob.glob(
-            os.path.join(new_dir, "case_*", "slurm-*.out")
-        )
-        log_files = glob.glob(
-            os.path.join(new_dir, "case_*", "*.log")
-        )
+        rocky_files = glob.glob(os.path.join(new_dir, "case_*", "*.rocky*"))
+        slurm_files = glob.glob(os.path.join(new_dir, "case_*", "slurm-*.out"))
+        log_files = glob.glob(os.path.join(new_dir, "case_*", "*.log"))
 
         for f in rocky_files + slurm_files + log_files:
             if os.path.isfile(f):
                 os.remove(f)
             elif os.path.isdir(f):
                 shutil.rmtree(f)
-        
-        py_scripts = glob.glob(
-            os.path.join(new_dir, "case_*", "script_uniax.py")
-        )
+
+        py_scripts = glob.glob(os.path.join(new_dir, "case_*", "script_uniax.py"))
 
         if not py_scripts:
             print(f"Warning: No script_uniax.py files found in {new_dir}")
@@ -257,13 +298,11 @@ def repeat_sweep(sweep_name:str, n_repeats: int, autolaunch: bool = True):
                 match_str="# Instantiate the shape for the particle",
                 new_line="particle.EnableRandomOrientation()",
             )
-        
-        if autolaunch:
 
+        if autolaunch:
             cases = glob.glob(os.path.join(new_dir, "case_*"))
             for case in cases:
                 with cd(case):
-
                     # Launch with sbatch
                     output = subprocess.run(
                         ["sbatch", "runRocky.sh"],
@@ -273,6 +312,8 @@ def repeat_sweep(sweep_name:str, n_repeats: int, autolaunch: bool = True):
                     if output.returncode == 0:
                         print(f"Launched simulation in {case}: {output.stdout.strip()}")
                     else:
-                        print(f"Error launching simulation in {case}: {output.stderr.strip()}")
+                        print(
+                            f"Error launching simulation in {case}: {output.stderr.strip()}"
+                        )
 
     print(f"Sweep '{sweep_name}' repeated {n_repeats} times.")

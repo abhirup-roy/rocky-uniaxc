@@ -20,6 +20,8 @@ dependencies = [
     "numpy-stl>=3.2.0",
     "pandas>=2.3.3",
     "pyevtk>=1.6.0",
+    "pytest-cov[test]>=6.0",
+    "pytest[test]>=8.0",
     "scikit-learn>=1.7.2",
     "scipy>=1.15.3",
     "tqdm>=4.67.3",
@@ -43,6 +45,13 @@ per-file-ignores = { "src/templates/*" = ["F821"] }
 
 [project.license]
 text = "MIT"
+
+[project.optional-dependencies]
+test = ["pytest>=8.0", "pytest-cov>=6.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
 
 [tool.setuptools.package-data]
 rocky_uniaxc = ["py.typed"]
