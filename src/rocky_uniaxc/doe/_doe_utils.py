@@ -6,7 +6,6 @@ script generation, and case directory management used by both
 """
 
 from __future__ import annotations
-
 import json
 import logging
 import os
@@ -75,13 +74,13 @@ class SimParams:
         density: Particle density in kg/m³.
         poisson: Poisson's ratio.
         youngmod: Young's modulus in Pa.
-        fric_dyn_pp: Dynamic friction coefficient (particle–particle).
-        fric_stat_pp: Static friction coefficient (particle–particle).
-        fric_rolling_pp: Rolling friction coefficient (particle–particle).
-        cor_pp: Coefficient of restitution (particle–particle).
-        fric_dyn_pw: Dynamic friction coefficient (particle–wall).
-        fric_stat_pw: Static friction coefficient (particle–wall).
-        cor_pw: Coefficient of restitution (particle–wall).
+        fric_dyn_pp: Dynamic friction coefficient (particle-particle).
+        fric_stat_pp: Static friction coefficient (particle-particle).
+        fric_rolling_pp: Rolling friction coefficient (particle-particle).
+        cor_pp: Coefficient of restitution (particle-particle).
+        fric_dyn_pw: Dynamic friction coefficient (particle-wall).
+        fric_stat_pw: Static friction coefficient (particle-wall).
+        cor_pw: Coefficient of restitution (particle-wall).
         box_len: Length of the simulation box in metres.
         p_compress: Compression pressure in Pa.
         normal: Normal contact force model name.
@@ -109,6 +108,16 @@ class SimParams:
     rolling: str
     adhesion: str
     shape: ShapeConfig = field(default_factory=ShapeConfig)
+
+    def __repr__(self) -> str:
+        return (
+            f"SimParams(\n"
+            f"    r={self.radius:.3g}, ρ={self.density:.3g}, ν={self.poisson:.3g}, E={self.youngmod:.3g},\n"
+            f"    μ_pp={self.fric_dyn_pp:.3g}/{self.fric_stat_pp:.3g}, μ_pw={self.fric_dyn_pw:.3g}/{self.fric_stat_pw:.3g},\n"
+            f"    e_pp={self.cor_pp:.3g}, e_pw={self.cor_pw:.3g},\n"
+            f"    L={self.box_len:.3g}, P={self.p_compress:.3g}, shape={self.shape.name!r}\n"
+            f")\n"
+        )
 
     @classmethod
     def from_tuple(cls, params: tuple, shape: ShapeConfig | dict) -> SimParams:

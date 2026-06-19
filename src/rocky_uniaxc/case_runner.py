@@ -5,6 +5,7 @@ Reads a ``settings.json`` file, constructs a
 executes it.
 """
 
+import json
 import sys
 from pathlib import Path
 from rocky_uniaxc.pyrocky.uniax import Settings, UniaxialCompressionSimulation
@@ -26,7 +27,10 @@ def main():
     settings_path = Path(sys.argv[1]).resolve()
     project_dir = settings_path.parent
 
-    settings = Settings.from_json(settings_path, project_dir=project_dir)
+    with open(settings_path) as f:
+        data = json.load(f)
+    data["project_dir"] = str(project_dir)
+    settings = Settings.from_dict(data)
 
     sim = UniaxialCompressionSimulation(settings)
     sim.execute()

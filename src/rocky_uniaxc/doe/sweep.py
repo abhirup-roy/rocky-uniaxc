@@ -8,6 +8,7 @@ launches the jobs.
 
 import json
 import os
+import sys
 from collections import OrderedDict
 import itertools
 from pathlib import Path
@@ -78,8 +79,8 @@ def iter_params(json_path: str) -> list[SimParams]:
 
 def launch_sweep(
     sweep_name: str,
+    scheduler: RockyScheduler,
     json_path: str,
-    scheduler: Optional[RockyScheduler] = None,
     meshdir: str = "meshes",
     template_dir: Optional[str | os.PathLike] = None,
     autolaunch=True,
@@ -114,14 +115,14 @@ def launch_sweep(
         ValueError: If an unsupported backend or target is specified.
         FileNotFoundError: If ``template_dir`` does not exist.
     """
-    if scheduler is None:
-        scheduler = RockyScheduler.bb_gpu()
     if backend is None:
         from .. import BACKEND
-
         backend = BACKEND
+    
     if backend not in ["rocky_prepost", "pyrocky"]:
         raise ValueError("backend must be 'rocky_prepost' or 'pyrocky'")
+    elif backend == "pyrocky":
+        scheduler.run_command = f"{sys.executable} -m rocky_uniaxc.case_runner settings.json"
 
     if template_dir:
         template_dir = Path(template_dir).resolve()

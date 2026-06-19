@@ -229,10 +229,10 @@ def iter_ofat(json_path: str, ofat_values: dict[str, list | str], n_points: int)
 
 def launch_ofat(
     sweep_name: str,
+    scheduler: RockyScheduler,
     ofat_values: dict[str, list | str],
     n_points: int,
     json_path: str | os.PathLike,
-    scheduler: Optional[RockyScheduler] = None,
     autolaunch: bool = True,
     target: str = "CPU",
     backend: Optional[str] = None,
@@ -284,15 +284,16 @@ def launch_ofat(
         FileNotFoundError: If ``template_dir`` does not exist.
         NotImplementedError: If ``target="MULTI_GPU"`` is requested.
     """
-    if scheduler is None:
-        scheduler = RockyScheduler.bb_cpu()
+    
     if not backend:
         from .. import BACKEND
-
         backend = BACKEND
+
     if backend not in ["rocky_prepost", "pyrocky"]:
         raise ValueError("backend must be 'rocky_prepost' or 'pyrocky'")
-
+    elif backend == "pyrocky":
+        scheduler.run_command = f"{sys.executable} -m rocky_uniaxc.case_runner settings.json"
+    
     if template_dir:
         template_dir = Path(template_dir).resolve()
         if not template_dir.exists():
