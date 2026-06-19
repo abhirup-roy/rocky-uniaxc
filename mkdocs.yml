@@ -1,0 +1,30 @@
+site_name: "Rocky-UniaxC"
+site_description: "Toolkit for multiscale uniaxial compression simulations in Ansys Rocky"
+site_author: "Abhirup Roy"
+repo_name: "abhiruproy/rocky-uniaxc"
+repo_url: "https://github.com/abhiruproy/rocky-uniaxc"
+
+theme:
+  name: dracula
+
+nav:
+  - Home: index.md
+  - User Guide:
+    - Getting Started: getting_started.md
+    - Examples: examples.md
+    - CLI Reference: cli.md
+  - API Reference: api.md
+
+plugins:
+  - search
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            show_source: true
+            show_root_heading: true
+            show_signature_annotations: true
+            inherited_members: true
+            members_order: source

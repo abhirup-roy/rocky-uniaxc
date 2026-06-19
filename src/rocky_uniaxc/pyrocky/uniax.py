@@ -359,7 +359,7 @@ class Settings:
         )
 
     @classmethod
-    def from_dict(cls, data: dict):
+    def from_dict(cls, data: dict) -> "Settings":
         """Create a :class:`Settings` instance from a dictionary.
 
         Args:
@@ -412,9 +412,9 @@ class UniaxialCompressionSimulation:
     def __init__(
         self,
         settings: Settings,
-        insertion=True,
+        insertion: bool = True,
         filename: str = "uniaxial_compression.rocky",
-    ):
+    ) -> None:
         self.settings = settings
         self.insertion = insertion
         self.filename = filename
@@ -450,7 +450,7 @@ class UniaxialCompressionSimulation:
         self._study = self._project.GetStudy()
         self._study.SetName("Uniaxial Compression")
 
-    def load_meshes(self, insert=True):
+    def load_meshes(self, insert: bool = True) -> None:
         """Import the top wall, bottom wall, and optionally the insert surface.
 
         Args:
@@ -596,7 +596,7 @@ class UniaxialCompressionSimulation:
         physics.SetGravityYDirection(-9.81)
         physics.SetGravityZDirection(0)
 
-    def insertion_settings(self, insert=True):
+    def insertion_settings(self, insert: bool = True) -> None:
         """Configure the particle inlet for the fill phase.
 
         Args:
@@ -632,7 +632,7 @@ class UniaxialCompressionSimulation:
                 "Raise an issue if you would like to see this feature added."
             )
 
-    def move_top_wall(self, insert=True):
+    def move_top_wall(self, insert: bool = True) -> None:
         """Apply a motion frame to the top wall for settling and compression.
 
         Args:
@@ -753,7 +753,7 @@ class UniaxialCompressionSimulation:
         if self.settings.adhesion_model != "none":
             contacts_data.EnableIncludeAdhesiveContacts()
 
-    def simulate(self, insert=True):
+    def simulate(self, insert: bool = True) -> None:
         """Run the simulation to completion.
 
         Args:
@@ -896,7 +896,12 @@ class UniaxialCompressionSimulation:
 
         return n_contacts
 
-    def post_process(self, sample_frac=0.9, plot=True, return_computed_metrics=False):
+    def post_process(
+        self,
+        sample_frac: float = 0.9,
+        plot: bool = True,
+        return_computed_metrics: bool = False,
+    ) -> tuple[Optional[float], Optional[float], Optional[float], Optional[float], Optional[float]]:
         """Post-process simulation results.
 
         Computes uncompressed and compressed bulk densities, contact numbers,
@@ -1007,7 +1012,12 @@ class UniaxialCompressionSimulation:
         else:
             return (None, None, None, None, None)
 
-    def execute(self, sample_frac=0.9, plot=True, return_computed_metrics=False):
+    def execute(
+        self,
+        sample_frac: float = 0.9,
+        plot: bool = True,
+        return_computed_metrics: bool = False,
+    ) -> Optional[tuple[Optional[float], Optional[float], Optional[float], Optional[float], Optional[float]]]:
         """Run the full simulation workflow from setup to post-processing.
 
         Sequentially calls :meth:`load_meshes`, :meth:`load_material_properties`,

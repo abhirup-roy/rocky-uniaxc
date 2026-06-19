@@ -83,7 +83,7 @@ def launch_sweep(
     json_path: str,
     meshdir: str = "meshes",
     template_dir: Optional[str | os.PathLike] = None,
-    autolaunch=True,
+    autolaunch: bool = True,
     target: str = "GPU",
     backend: Optional[str] = None,
 ):
@@ -117,12 +117,15 @@ def launch_sweep(
     """
     if backend is None:
         from .. import BACKEND
+
         backend = BACKEND
-    
+
     if backend not in ["rocky_prepost", "pyrocky"]:
         raise ValueError("backend must be 'rocky_prepost' or 'pyrocky'")
     elif backend == "pyrocky":
-        scheduler.run_command = f"{sys.executable} -m rocky_uniaxc.case_runner settings.json"
+        scheduler.run_command = (
+            f"{sys.executable} -m rocky_uniaxc.case_runner settings.json"
+        )
 
     if template_dir:
         template_dir = Path(template_dir).resolve()

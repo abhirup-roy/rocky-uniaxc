@@ -12,7 +12,7 @@ import os
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Iterator
 import jinja2
 
 logger = logging.getLogger(__name__)
@@ -157,7 +157,7 @@ class SimParams:
 
 
 @contextmanager
-def case_directory(sweep_name: str | Path, case_idx: int, meshdir: str = "meshes"):
+def case_directory(sweep_name: str | Path, case_idx: int, meshdir: str = "meshes") -> Iterator[Path]:
     """Context manager for creating and managing a case directory.
 
     Creates the following directory structure::

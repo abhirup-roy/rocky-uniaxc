@@ -6,6 +6,7 @@ and can apply them to a Rocky particle via :meth:`Shape.particle2rocky`.
 """
 
 import os
+from typing import Any
 
 
 class Shape:
@@ -95,7 +96,7 @@ class Shape:
         else:
             self.size_type = size_type
 
-    def particle2rocky(self, particle, material, rolling_friction: float = 0.0) -> None:
+    def particle2rocky(self, particle: Any, material: Any, rolling_friction: float = 0.0) -> None:
         """Apply this shape's parameters to a Rocky particle object.
 
         Sets the size distribution, material, shape type, and optional
@@ -250,9 +251,9 @@ class CustomPolyhedron(Shape):
             raise FileNotFoundError(f"STL file not found: {stl_path}")
         else:
             self.stl_path = stl_path
-        self.radius = radius
+        super().__init__(shape_type="custom_polyhedron", radius=radius)
 
-    def particle2rocky(self, particle, material, rolling_friction: float = 0.0):
+    def particle2rocky(self, particle: Any, material: Any, rolling_friction: float = 0.0) -> None:
         """Apply the custom polyhedron shape to a Rocky particle.
 
         Imports the STL geometry and assigns the material and rolling

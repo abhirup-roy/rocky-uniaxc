@@ -27,7 +27,9 @@ from ..compr_meshgen import create_meshes
 from ..utils import RockyScheduler
 
 
-def iter_ofat(json_path: str, ofat_values: dict[str, list | str], n_points: int):
+def iter_ofat(
+    json_path: str, ofat_values: dict[str, list | str], n_points: int
+) -> tuple[pd.DataFrame, dict]:
     """Compute all OFAT experiment points from a base configuration.
 
     Reads the base parameter values from a JSON file and generates an
@@ -39,11 +41,9 @@ def iter_ofat(json_path: str, ofat_values: dict[str, list | str], n_points: int)
         ofat_values: Dictionary specifying the OFAT design. Must contain:
 
             - ``"parameters"``: list of parameter names to vary.
-            - ``"test_range"``: list of ``(lower, upper)`` tuples for each
-              parameter.
+            - ``"test_range"``: list of ``(lower, upper)`` tuples for each parameter.
             - ``"hold_values"``: list of hold strategies — ``"h"`` (high),
-              ``"l"`` (low), or ``"m"`` (mid) — for the baseline of each
-              parameter.
+              ``"l"`` (low), or ``"m"`` (mid) — for the baseline of each parameter.
 
         n_points: Number of evenly-spaced levels to generate for each factor.
 
@@ -51,9 +51,9 @@ def iter_ofat(json_path: str, ofat_values: dict[str, list | str], n_points: int)
         A tuple ``(experiments_df, base_dict)`` where:
 
         - ``experiments_df`` is a :class:`~pandas.DataFrame` with one row per
-          experiment.
+            experiment.
         - ``base_dict`` is a dictionary of parameters that remain constant
-          across all experiments.
+            across all experiments.
 
     Raises:
         ValueError: If the OFAT specification is invalid, parameters are
@@ -285,16 +285,19 @@ def launch_ofat(
         FileNotFoundError: If ``template_dir`` does not exist.
         NotImplementedError: If ``target="MULTI_GPU"`` is requested.
     """
-    
+
     if not backend:
         from .. import BACKEND
+
         backend = BACKEND
 
     if backend not in ["rocky_prepost", "pyrocky"]:
         raise ValueError("backend must be 'rocky_prepost' or 'pyrocky'")
     elif backend == "pyrocky":
-        scheduler.run_command = f"{sys.executable} -m rocky_uniaxc.case_runner settings.json"
-    
+        scheduler.run_command = (
+            f"{sys.executable} -m rocky_uniaxc.case_runner settings.json"
+        )
+
     if template_dir:
         template_dir = Path(template_dir).resolve()
         if not template_dir.exists():

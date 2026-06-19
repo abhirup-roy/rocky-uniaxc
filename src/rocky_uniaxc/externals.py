@@ -5,7 +5,7 @@ converting them to VTK unstructured grids with per-cell data (orientation,
 velocity, etc.), and generating VTK files for visualisation in ParaView.
 """
 
-from typing import Optional
+from typing import Optional, Any
 import os
 import tempfile
 from warnings import warn
@@ -61,7 +61,7 @@ def _load_particle_stl(file_path: str):
         return None, None
 
 
-def export_particle_stl(project, study) -> str:
+def export_particle_stl(project: Any, study: Any) -> str:
     """Export the first particle's geometry to an STL file.
 
     Args:
@@ -224,7 +224,7 @@ def _vtk_gen(
 
 
 @pyrocky_run()
-def generate_vtk(rocky, rocky_filepath: str, output_dir: str):
+def generate_vtk(rocky: Any, rocky_filepath: str, output_dir: str) -> None:
     """Generate VTK files for particle data at every saved time step.
 
     Reads particle positions, orientations, translational and rotational

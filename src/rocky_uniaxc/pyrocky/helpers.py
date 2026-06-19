@@ -2,6 +2,7 @@ import shutil
 import pathlib
 import functools
 import inspect
+from typing import Optional
 
 try:
     import ansys.rocky.core as rocky_api
@@ -9,7 +10,7 @@ except ImportError:
     rocky_api = None
 
 
-def find_rocky_exe():
+def find_rocky_exe() -> Optional[str]:
     """Attempt to locate the Rocky executable.
 
     Searches common installation paths and the system ``PATH`` for the Rocky
@@ -64,7 +65,7 @@ class pyrocky_run:
         FileNotFoundError: If the Rocky executable cannot be located.
     """
 
-    def __init__(self, headless=None):
+    def __init__(self, headless: Optional[bool] = None):
         self.headless = headless
         from .. import ROCKY_EXE_PATH
         self.rocky_exe = find_rocky_exe() or ROCKY_EXE_PATH
