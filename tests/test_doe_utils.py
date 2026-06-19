@@ -229,18 +229,17 @@ class TestPrepareCase:
         with pytest.raises(ValueError, match="Unknown backend"):
             prepare_case(case_dir, ctx, backend="invalid")
 
-    def test_case_runner(self, tmp_path, fake_rocky_on_path):
+    def test_case_runner(self, tmp_path, fake_rocky_on_path, sample_sim_params):
         case_dir = tmp_path / "case_0"
         case_dir.mkdir()
 
-        # Use the repo's example DOE JSON
-        example_json_pth = Path(__file__).parent.parent / "json" / "ofat_base.json"
-        settings_path = case_dir / "settings.json"
-        settings_path.write_text(example_json_pth.read_text())
+        # Generate settings.json via the same DOE pipeline that real runs use
+        mesh_dir = tmp_path / "meshes"
+        mesh_dir.mkdir()
+        ctx = script_context_from_params(sample_sim_params, "GPU")
+        prepare_case(case_dir, ctx, backend="pyrocky", mesh_path=mesh_dir)
 
-        # Ensure mesh_dir auto-resolution does not trigger mesh generation.
-        # ofat_base.json has box_len = 0.0025
-        (tmp_path / "meshes_0.0025").mkdir(parents=True, exist_ok=True)
+        settings_path = case_dir / "settings.json"
 
         argv = sys.argv.copy()
         try:
