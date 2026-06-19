@@ -13,9 +13,19 @@ Before installing the package, make sure you meet the following requirements:
 
 ## Installation
 
-You can install the package directly using `pip` or [uv](https://github.com/astral-sh/uv).
+### From PyPI
 
-### Using `uv` (Recommended)
+The easiest way to install Rocky-UniaxC is directly from [PyPI](https://pypi.org/project/rocky-uniaxc/):
+
+```bash
+pip install rocky-uniaxc
+```
+
+### From Source
+
+You can also install from source using `pip` or [uv](https://github.com/astral-sh/uv).
+
+#### Using `uv` (Recommended)
 
 Sync development and testing dependencies in a virtual environment:
 
@@ -29,7 +39,7 @@ Install the package into your current python environment:
 uv pip install .
 ```
 
-### Using `pip`
+#### Using `pip`
 
 Install standard package:
 

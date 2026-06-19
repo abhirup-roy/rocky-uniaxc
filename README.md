@@ -1,6 +1,7 @@
 # Rocky-UniaxC: Multiscale Uniaxial Compression Simulation Toolkit for Ansys Rocky
 
 [![Build and Test](https://github.com/abhirup-roy/rocky-uniaxc/actions/workflows/ci.yml/badge.svg)](https://github.com/abhirup-roy/rocky-uniaxc/actions/workflows/ci.yml)
+[![PyPI version](https://img.shields.io/pypi/v/rocky-uniaxc.svg)](https://pypi.org/project/rocky-uniaxc/)
 ![Python Versions](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue?logo=python)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -32,9 +33,19 @@
 
 ## ⚙️ Installation
 
-You can install the package using `uv` (recommended) or `pip`:
+### From PyPI
 
-### Using `uv`
+Install the latest release directly from PyPI:
+
+```bash
+pip install rocky-uniaxc
+```
+
+### From Source
+
+You can also install from source using `uv` (recommended) or `pip`:
+
+#### Using `uv`
 
 To sync development and testing dependencies in a virtual environment:
 
@@ -48,7 +59,7 @@ To install the package into your current Python environment:
 uv pip install .
 ```
 
-### Using `pip`
+#### Using `pip`
 
 Install the core package:
 
