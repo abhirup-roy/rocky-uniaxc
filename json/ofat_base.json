@@ -12,7 +12,7 @@
         "poisson": 0.25,
         "youngmod": 5e6
     },
-    "inseractions": {
+    "interactions": {
         "pp": {
             "fric_dyn": 0.7,
             "fric_stat": 0.3,
