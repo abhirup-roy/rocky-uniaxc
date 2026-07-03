@@ -74,12 +74,17 @@ class SimParams:
         density: Particle density in kg/m³.
         poisson: Poisson's ratio.
         youngmod: Young's modulus in Pa.
+        surf_en_pp: Surface energy in J/m²
         fric_dyn_pp: Dynamic friction coefficient (particle-particle).
         fric_stat_pp: Static friction coefficient (particle-particle).
         fric_rolling_pp: Rolling friction coefficient (particle-particle).
+        tan_stiff_r_pp: Tangential stiffness ratio (particle-particle).
         cor_pp: Coefficient of restitution (particle-particle).
+        surf_en_pw: Surface energy in J/m²
         fric_dyn_pw: Dynamic friction coefficient (particle-wall).
         fric_stat_pw: Static friction coefficient (particle-wall).
+        fric_rolling_pw: Rolling friction coefficient (particle-wall).
+        tan_stiff_r_pw: Tangential stiffness ratio (particle-wall).
         cor_pw: Coefficient of restitution (particle-wall).
         box_len: Length of the simulation box in metres.
         p_compress: Compression pressure in Pa.
@@ -94,12 +99,17 @@ class SimParams:
     density: float
     poisson: float
     youngmod: float
+    surf_en_pp: float
     fric_dyn_pp: float
     fric_stat_pp: float
     fric_rolling_pp: float
+    tan_stiff_r_pp: float
     cor_pp: float
+    surf_en_pw: float
     fric_dyn_pw: float
     fric_stat_pw: float
+    fric_rolling_pw: float
+    tan_stiff_r_pw: float
     cor_pw: float
     box_len: float
     p_compress: float
@@ -113,7 +123,7 @@ class SimParams:
         return (
             f"SimParams(\n"
             f"    r={self.radius:.3g}, ρ={self.density:.3g}, ν={self.poisson:.3g}, E={self.youngmod:.3g},\n"
-            f"    μ_pp={self.fric_dyn_pp:.3g}/{self.fric_stat_pp:.3g}, μ_pw={self.fric_dyn_pw:.3g}/{self.fric_stat_pw:.3g},\n"
+            f"    μ_pp={self.fric_dyn_pp:.3g}/{self.fric_stat_pp:.3g} (μr_pp={self.fric_rolling_pp:.3g}), μ_pw={self.fric_dyn_pw:.3g}/{self.fric_stat_pw:.3g} (μr_pw={self.fric_rolling_pw:.3g}),\n"
             f"    e_pp={self.cor_pp:.3g}, e_pw={self.cor_pw:.3g},\n"
             f"    L={self.box_len:.3g}, P={self.p_compress:.3g}, shape={self.shape.name!r}\n"
             f")\n"
@@ -124,7 +134,7 @@ class SimParams:
         """Create a SimParams from a parameter tuple and a shape specification.
 
         Args:
-            params: A 17-element tuple of simulation parameters in the
+            params: A 22-element tuple of simulation parameters in the
                 canonical order (radius, density, …, adhesion).
             shape: A :class:`ShapeConfig` instance or a dictionary that can
                 be passed to :meth:`ShapeConfig.from_dict`.
@@ -139,19 +149,24 @@ class SimParams:
             density=params[1],
             poisson=params[2],
             youngmod=params[3],
-            fric_dyn_pp=params[4],
-            fric_stat_pp=params[5],
-            fric_rolling_pp=params[6],
-            cor_pp=params[7],
-            fric_dyn_pw=params[8],
-            fric_stat_pw=params[9],
-            cor_pw=params[10],
-            box_len=params[11],
-            p_compress=params[12],
-            normal=params[13],
-            tangential=params[14],
-            rolling=params[15],
-            adhesion=params[16],
+            surf_en_pp=params[4],
+            fric_dyn_pp=params[5],
+            fric_stat_pp=params[6],
+            fric_rolling_pp=params[7],
+            tan_stiff_r_pp=params[8],
+            cor_pp=params[9],
+            surf_en_pw=params[10],
+            fric_dyn_pw=params[11],
+            fric_stat_pw=params[12],
+            fric_rolling_pw=params[13],
+            tan_stiff_r_pw=params[14],
+            cor_pw=params[15],
+            box_len=params[16],
+            p_compress=params[17],
+            normal=params[18],
+            tangential=params[19],
+            rolling=params[20],
+            adhesion=params[21],
             shape=shape,
         )
 
@@ -219,17 +234,22 @@ def render_pyrocky_script(
         "p_density": script_contxt["DENSITY_P"],
         "p_youngmod": script_contxt["YOUNGMOD_P"],
         "p_poisson": script_contxt["POISSON_P"],
+        "surf_en_pp": script_contxt["SURFACE_ENERGY_PP"],
         "fric_dyn_pp": script_contxt["DYNAMIC_FRICTION_PP"],
         "fric_stat_pp": script_contxt["STATIC_FRICTION_PP"],
+        "tan_stiff_r_pp": script_contxt["TANGENTIAL_STIFFNESS_RATIO_PP"],
         "cor_pp": script_contxt["COR_PP"],
+        "surf_en_pw": script_contxt["SURFACE_ENERGY_PW"],
         "fric_dyn_pw": script_contxt["DYNAMIC_FRICTION_PW"],
         "fric_stat_pw": script_contxt["STATIC_FRICTION_PW"],
+        "tan_stiff_r_pw": script_contxt["TANGENTIAL_STIFFNESS_RATIO_PW"],
         "cor_pw": script_contxt["COR_PW"],
         "normal_force_model": script_contxt["NORMAL_MODEL"].strip('"'),
         "tangential_force_model": script_contxt["TANG_MODEL"].strip('"'),
         "adhesion_model": script_contxt["ADH_MODEL"].strip('"'),
-        "rolling_fric": script_contxt.get("ROLLING_FRICTION", 0.0),
-        "rolling_model": script_contxt["ROLLING_MODEL"].strip('"'),
+        "fric_rolling_pp": script_contxt.get("ROLLING_FRICTION_PP", 0.2), # Set these to a researched baseline
+        "fric_rolling_pw": script_contxt.get("ROLLING_FRICTION_PW", 0.2),
+        "rolling_resistance_model": script_contxt["ROLLING_MODEL"].strip('"'),
         "processor": script_contxt["XPU"].strip('"'),
         "mesh_dir": mesh_path,
         "shape_name": script_contxt["SHAPE"].strip('"'),
@@ -268,18 +288,25 @@ def script_context_from_params(
     Returns:
         Dictionary of template variables for script rendering.
     """
-    rolling_fric = params.fric_rolling_pp if params.rolling != "none" else 0
+    rolling_fric_pp = params.fric_rolling_pp if params.rolling != "none" else 0.2 # Also change this baseline
+    rolling_fric_pw = params.fric_rolling_pw if params.rolling != "none" else 0.2
 
     return {
         "RADIUS_P": params.radius,
         "DENSITY_P": params.density,
         "POISSON_P": params.poisson,
         "YOUNGMOD_P": params.youngmod,
+        "SURFACE_ENERGY_PP": params.surf_en_pp,
         "DYNAMIC_FRICTION_PP": params.fric_dyn_pp,
         "STATIC_FRICTION_PP": params.fric_stat_pp,
+        "ROLLING_FRICTION_PP": params.fric_rolling_pp,
+        "TANGENTIAL_STIFFNESS_RATIO_PP": params.tan_stiff_r_pp,
         "COR_PP": params.cor_pp,
+        "SURFACE_ENERGY_PW": params.surf_en_pw,
         "DYNAMIC_FRICTION_PW": params.fric_dyn_pw,
         "STATIC_FRICTION_PW": params.fric_stat_pw,
+        "ROLLING_FRICTION_PW": params.fric_rolling_pw,
+        "TANGENTIAL_STIFFNESS_RATIO_PW": params.tan_stiff_r_pw,
         "COR_PW": params.cor_pw,
         "L_BOX": params.box_len,
         "P_COMPRESS": params.p_compress,
@@ -296,7 +323,8 @@ def script_context_from_params(
         "SMOOTHNESS": params.shape.smoothness,
         "XPU": target,
         "MESH_DIR": meshdir,
-        "ROLLING_FRICTION": rolling_fric,
+        "ROLLING_FRICTION_PP": rolling_fric_pp,
+        "ROLLING_FRICTION_PW": rolling_fric_pw
     }
 
 
