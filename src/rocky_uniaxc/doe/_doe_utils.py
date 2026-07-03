@@ -247,8 +247,8 @@ def render_pyrocky_script(
         "normal_force_model": script_contxt["NORMAL_MODEL"].strip('"'),
         "tangential_force_model": script_contxt["TANG_MODEL"].strip('"'),
         "adhesion_model": script_contxt["ADH_MODEL"].strip('"'),
-        "fric_rolling_pp": script_contxt.get("ROLLING_FRICTION_PP", 0.2), # Set these to a researched baseline
-        "fric_rolling_pw": script_contxt.get("ROLLING_FRICTION_PW", 0.2),
+        "fric_rolling_pp": script_contxt.get("ROLLING_FRICTION_PP", 0.25), # Set these to a researched baseline
+        "fric_rolling_pw": script_contxt.get("ROLLING_FRICTION_PW", 0.25),
         "rolling_resistance_model": script_contxt["ROLLING_MODEL"].strip('"'),
         "processor": script_contxt["XPU"].strip('"'),
         "mesh_dir": mesh_path,
@@ -288,8 +288,8 @@ def script_context_from_params(
     Returns:
         Dictionary of template variables for script rendering.
     """
-    rolling_fric_pp = params.fric_rolling_pp if params.rolling != "none" else 0.2 # Also change this baseline
-    rolling_fric_pw = params.fric_rolling_pw if params.rolling != "none" else 0.2
+    rolling_fric_pp = params.fric_rolling_pp if params.rolling != "none" else 0.25 # Also change this baseline
+    rolling_fric_pw = params.fric_rolling_pw if params.rolling != "none" else 0.25
 
     return {
         "RADIUS_P": params.radius,
