@@ -17,12 +17,14 @@
             "fric_dyn": 0.7,
             "fric_stat": 0.3,
             "fric_rolling": 0.1,
+            "tan_stiff_r" : 1.0,
             "cor": 0.4
         },
         "pw": {
             "fric_dyn": 0.7,
             "fric_stat": 0.3,
             "fric_rolling": 0.1,
+            "tan_stiff_r" : 1.0,
             "cor": 0.4
         }
     },

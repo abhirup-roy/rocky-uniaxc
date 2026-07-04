@@ -41,40 +41,47 @@ ROLLING_MODEL = "{{ROLLING_MODEL}}"  # 'type_1', 'type_3', 'none', 'custom'
 assert ROLLING_MODEL in ["type_1", "type_3", "none", "custom"]
 
 # P-P / P-W properties
+PP_SURFACE_ENERGY: float = {{SURFACE_ENERGY_PP}}
 PP_DYNAMIC_FRICTION: float = {{DYNAMIC_FRICTION_PP}}
 PP_STATIC_FRICTION: float = {{STATIC_FRICTION_PP}}
 PP_COR: float = {{COR_PP}}
-ROLLING_FRICTION: float = {{ROLLING_FRICTION}}
+PP_ROLLING_FRICTION: float = {{ROLLING_FRICTION_PP}}
 
+PW_SURFACE_ENERGY: float = {{SURFACE_ENERGY_PW}}
 PW_DYNAMIC_FRICTION: float = {{DYNAMIC_FRICTION_PW}}
 PW_STATIC_FRICTION: float = {{STATIC_FRICTION_PW}}
+PW_ROLLING_FRICTION: float = {{ROLLING_FRICTION_PW}}
 PW_COR: float = {{COR_PW}}
 
 for i, _p in enumerate(
     [
+        PP_SURFACE_ENERGY,
         PP_DYNAMIC_FRICTION,
         PP_STATIC_FRICTION,
         PP_COR,
+        PW_SURFACE_ENERGY,
         PW_DYNAMIC_FRICTION,
         PW_STATIC_FRICTION,
         PW_COR,
-        ROLLING_FRICTION,
+        PP_ROLLING_FRICTION,
+        PW_ROLLING_FRICTION,
         P_POISSON,
     ]
 ):
-    if (i == 6) and (ROLLING_MODEL == "none") and (not _p):
+    if (i in [8, 9]) and (ROLLING_MODEL == "type_3") and (not _p):
         continue
-    if (i in [2, 5]) and (_p < 0 or _p > 1): # CORs
+
+    if (i in [3, 7]) and (_p < 0 or _p > 1): # CORs
         raise ValueError(
             f"Expected a value between 0 and 1."
             f"Got {_p} for one of the particle properties."
         )
-    if (i == 7) and (_p < 0 or _p > 0.5): # Poisson
+    if (i == 10) and (_p < 0 or _p > 0.5): # Poisson
         raise ValueError(
             f"Expected a value between 0 and 0.5 for Poisson's ratio."
             f"Got {_p}."
         )
-    if (i not in [2, 5, 7]) and (_p < 0): # Frictions
+    if (i in [1, 2, 5, 6, 8, 9]) and (_p < 0): # Frictions
         raise ValueError(
             f"Expected a non-negative value."
             f"Got {_p} for friction."
