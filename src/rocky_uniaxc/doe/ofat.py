@@ -73,7 +73,7 @@ def iter_ofat(
         params["particle_properties"]["density"],
         params["particle_properties"]["poisson"],
         params["particle_properties"]["youngmod"],
-        params["interactions"]["surf_en"],
+        params["interactions"]["pp"]["surf_en"],
         params["interactions"]["pp"]["fric_dyn"],
         params["interactions"]["pp"]["fric_stat"],
         params["interactions"]["pp"]["fric_rolling"],
@@ -391,13 +391,11 @@ def launch_ofat(
             "SURFACE_ENERGY_PP": exp_dict["surf_en_pp"],
             "DYNAMIC_FRICTION_PP": exp_dict["fric_dyn_pp"],
             "STATIC_FRICTION_PP": exp_dict["fric_stat_pp"],
-            "ROLLING_FRICTION_PP": exp_dict["fric_rolling_pp"],
             "TANGENTIAL_STIFFNESS_RATIO_PP": exp_dict["tan_stiff_r_pp"],
             "COR_PP": exp_dict["cor_pp"],
             "SURFACE_ENERGY_PW": exp_dict["surf_en_pw"],
             "DYNAMIC_FRICTION_PW": exp_dict["fric_dyn_pw"],
             "STATIC_FRICTION_PW": exp_dict["fric_stat_pw"],
-            "ROLLING_FRICTION_PW": exp_dict["fric_rolling_pw"],
             "TANGENTIAL_STIFFNESS_RATIO_PW": exp_dict["tan_stiff_r_pw"],
             "COR_PW": exp_dict["cor_pw"],
             "L_BOX": exp_dict["box_len"],
@@ -418,11 +416,14 @@ def launch_ofat(
             "SHAPES_MODULE_PATH": shapes_module_path,
         }
 
-        if exp_dict["rolling"] != "none":
+        if exp_dict["fric_rolling_pp"] != "none":
             script_contxt["ROLLING_FRICTION_PP"] = exp_dict["fric_rolling_pp"]
-            script_contxt["ROLLING_FRICTION_PW"] = exp_dict["fric_rolling_pw"]
         else:
             script_contxt["ROLLING_FRICTION_PP"] = 0.25
+
+        if exp_dict["fric_rolling_pw"] != "none":
+            script_contxt["ROLLING_FRICTION_PW"] = exp_dict["fric_rolling_pw"]
+        else:
             script_contxt["ROLLING_FRICTION_PW"] = 0.25
 
         prepare_case(

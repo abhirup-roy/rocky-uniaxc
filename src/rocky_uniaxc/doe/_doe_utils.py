@@ -247,8 +247,8 @@ def render_pyrocky_script(
         "normal_force_model": script_contxt["NORMAL_MODEL"].strip('"'),
         "tangential_force_model": script_contxt["TANG_MODEL"].strip('"'),
         "adhesion_model": script_contxt["ADH_MODEL"].strip('"'),
-        "fric_rolling_pp": script_contxt.get("ROLLING_FRICTION_PP", 0.25), # Set these to a researched baseline
-        "fric_rolling_pw": script_contxt.get("ROLLING_FRICTION_PW", 0.25),
+        "rolling_fric_pp": script_contxt.get("ROLLING_FRICTION_PP", 0.25), # Set these to a researched baseline
+        "rolling_fric_pw": script_contxt.get("ROLLING_FRICTION_PW", 0.25),
         "rolling_resistance_model": script_contxt["ROLLING_MODEL"].strip('"'),
         "processor": script_contxt["XPU"].strip('"'),
         "mesh_dir": mesh_path,
@@ -288,8 +288,8 @@ def script_context_from_params(
     Returns:
         Dictionary of template variables for script rendering.
     """
-    rolling_fric_pp = params.fric_rolling_pp if params.rolling != "none" else 0.25 # Also change this baseline
-    rolling_fric_pw = params.fric_rolling_pw if params.rolling != "none" else 0.25
+    rolling_fric_pp = params.fric_rolling_pp if params.fric_rolling_pp != "none" else 0.25 # Also change this baseline
+    rolling_fric_pw = params.fric_rolling_pw if params.fric_rolling_pw != "none" else 0.25
 
     return {
         "RADIUS_P": params.radius,
@@ -299,13 +299,11 @@ def script_context_from_params(
         "SURFACE_ENERGY_PP": params.surf_en_pp,
         "DYNAMIC_FRICTION_PP": params.fric_dyn_pp,
         "STATIC_FRICTION_PP": params.fric_stat_pp,
-        "ROLLING_FRICTION_PP": params.fric_rolling_pp,
         "TANGENTIAL_STIFFNESS_RATIO_PP": params.tan_stiff_r_pp,
         "COR_PP": params.cor_pp,
         "SURFACE_ENERGY_PW": params.surf_en_pw,
         "DYNAMIC_FRICTION_PW": params.fric_dyn_pw,
         "STATIC_FRICTION_PW": params.fric_stat_pw,
-        "ROLLING_FRICTION_PW": params.fric_rolling_pw,
         "TANGENTIAL_STIFFNESS_RATIO_PW": params.tan_stiff_r_pw,
         "COR_PW": params.cor_pw,
         "L_BOX": params.box_len,
