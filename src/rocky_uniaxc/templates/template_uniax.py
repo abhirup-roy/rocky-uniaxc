@@ -44,12 +44,14 @@ assert ROLLING_MODEL in ["type_1", "type_3", "none", "custom"]
 PP_SURFACE_ENERGY: float = {{SURFACE_ENERGY_PP}}
 PP_DYNAMIC_FRICTION: float = {{DYNAMIC_FRICTION_PP}}
 PP_STATIC_FRICTION: float = {{STATIC_FRICTION_PP}}
+PP_TANGENTIAL_STIFFNESS_RATIO: float = {{TANGENTIAL_STIFFNESS_RATIO_PP}}
 PP_COR: float = {{COR_PP}}
 PP_ROLLING_FRICTION: float = {{ROLLING_FRICTION_PP}}
 
 PW_SURFACE_ENERGY: float = {{SURFACE_ENERGY_PW}}
 PW_DYNAMIC_FRICTION: float = {{DYNAMIC_FRICTION_PW}}
 PW_STATIC_FRICTION: float = {{STATIC_FRICTION_PW}}
+PW_TANGENTIAL_STIFFNESS_RATIO: float = {{TANGENTIAL_STIFFNESS_RATIO_PW}}
 PW_ROLLING_FRICTION: float = {{ROLLING_FRICTION_PW}}
 PW_COR: float = {{COR_PW}}
 
@@ -58,33 +60,45 @@ for i, _p in enumerate(
         PP_SURFACE_ENERGY,
         PP_DYNAMIC_FRICTION,
         PP_STATIC_FRICTION,
+        PP_TANGENTIAL_STIFFNESS_RATIO,
         PP_COR,
         PW_SURFACE_ENERGY,
         PW_DYNAMIC_FRICTION,
         PW_STATIC_FRICTION,
+        PW_TANGENTIAL_STIFFNESS_RATIO,
         PW_COR,
         PP_ROLLING_FRICTION,
         PW_ROLLING_FRICTION,
         P_POISSON,
     ]
 ):
-    if (i in [8, 9]) and (ROLLING_MODEL == "type_3") and (not _p):
+    if (i in [10, 11]) and (ROLLING_MODEL == "type_3") and (not _p):
         continue
 
-    if (i in [3, 7]) and (_p < 0 or _p > 1): # CORs
+    if (i in [4, 9]) and (_p < 0 or _p > 1): # CORs
         raise ValueError(
             f"Expected a value between 0 and 1."
             f"Got {_p} for one of the particle properties."
         )
-    if (i == 10) and (_p < 0 or _p > 0.5): # Poisson
+    if (i in [3, 8]) and (_p < 0 or _p > 1): # Tangential Stiffness Ratio
+        raise ValueError(
+            f"Expected a value between 0 and 1 for tangential stiffness ratio."
+            f"Got {_p}."
+        )
+    if (i == 12) and (_p < 0 or _p > 0.5): # Poisson
         raise ValueError(
             f"Expected a value between 0 and 0.5 for Poisson's ratio."
             f"Got {_p}."
         )
-    if (i in [1, 2, 5, 6, 8, 9]) and (_p < 0): # Frictions
+    if (i in [1, 2, 6, 7, 10, 11]) and (_p < 0): # Frictions
         raise ValueError(
             f"Expected a non-negative value."
             f"Got {_p} for friction."
+        )
+    if (i in [0, 5]) and (_p < 0): # Surface Energy
+        raise ValueError(
+            f"Expected a non-negative value."
+            f"Got {_p} for surface energy."
         )
 
 # Contact models
@@ -270,13 +284,17 @@ def load_interactions() -> None:
 
     # Set the contact laws for the particle-particle interaction
     pp_interaction.SetRestitutionCoefficient(PP_COR)
+    pp_interaction.SetSurfaceEnergy(PP_SURFACE_ENERGY)
     pp_interaction.SetStaticFriction(PP_STATIC_FRICTION)
     pp_interaction.SetDynamicFriction(PP_DYNAMIC_FRICTION)
+    pp_interaction.SetTangentialStiffnessRatio(PP_TANGENTIAL_STIFFNESS_RATIO)
 
     # Set the contact laws for the particle-wall interaction
     pw_interaction.SetRestitutionCoefficient(PW_COR)
+    pw_interaction.SetSurfaceEnergy(PW_SURFACE_ENERGY)
     pw_interaction.SetStaticFriction(PW_STATIC_FRICTION)
     pw_interaction.SetDynamicFriction(PW_DYNAMIC_FRICTION)
+    pw_interaction.SetTangentialStiffnessRatio(PW_TANGENTIAL_STIFFNESS_RATIO)
 
 
 def set_psd() -> None:
@@ -332,8 +350,13 @@ def set_psd() -> None:
 
     # Set particle material
     particle.SetMaterial(particle_mat)
-    if ROLLING_FRICTION != "none":
-        particle.SetRollingResistance(ROLLING_FRICTION)
+    if PP_ROLLING_FRICTION != "none":
+        particle.SetRollingResistance(PP_ROLLING_FRICTION)
+        
+    particle.SetMaterial(particle_mat)
+    if PW_ROLLING_FRICTION != "none":
+        particle.SetRollingResistance(PW_ROLLING_FRICTION)
+
 
 
 def gen_particle(shape_dict: dict[str, float | str]) -> None:
@@ -753,7 +776,7 @@ def post_process(plot: Optional[bool] = True) -> None:
     compr_contacts = _calc_contact_no(particles, -1, 0.9)
     contacts_ratio = compr_contacts / uncompr_contacts
 
-    # Caclulate shear strengths
+    # Calculate shear strengths
     uncompr_mean_stress, uncompr_dev_stress = _calc_shear_strength(
         particles, settled_timestep, 0.9
     )
@@ -847,13 +870,18 @@ def post_process(plot: Optional[bool] = True) -> None:
         P_DENSITY,
         P_YOUNGMOD,
         P_POISSON,
+        PP_SURFACE_ENERGY,
         PP_DYNAMIC_FRICTION,
         PP_STATIC_FRICTION,
+        PP_TANGENTIAL_STIFFNESS_RATIO,
         PP_COR,
+        PP_ROLLING_FRICTION,
+        PW_SURFACE_ENERGY,
         PW_DYNAMIC_FRICTION,
         PW_STATIC_FRICTION,
+        PW_TANGENTIAL_STIFFNESS_RATIO,
         PW_COR,
-        ROLLING_FRICTION,
+        PW_ROLLING_FRICTION,
         COMPR_PRESSURE,
         NORMAL_FORCE_MODEL,
         TANGENTIAL_FORCE_MODEL,
@@ -883,13 +911,18 @@ def post_process(plot: Optional[bool] = True) -> None:
         "p_density",
         "p_youngmod",
         "p_poisson",
+        "pp_surface_energy",
         "pp_dynamic_friction",
         "pp_static_friction",
+        "pp_rolling_friction",
         "pp_cor",
+        "pp_tangential_stiffness_ratio",
+        "pw_surface_energy",
         "pw_dynamic_friction",
         "pw_static_friction",
         "pw_cor",
-        "rolling_friction",
+        "pw_tangential_stiffness_ratio",
+        "pw_rolling_friction",
         "compression_pressure",
         "normal_force_model",
         "tangential_force_model",
@@ -937,13 +970,18 @@ def post_process(plot: Optional[bool] = True) -> None:
             p_density REAL,
             p_youngmod REAL,
             p_poisson REAL,
+            pp_surface_energy REAL,
             pp_dynamic_friction REAL,
             pp_static_friction REAL,
+            pp_tangential_stiffness_ratio REAL,
             pp_cor REAL,
+            pp_rolling_friction REAL,
+            pw_surface_energy REAL,
             pw_dynamic_friction REAL,
             pw_static_friction REAL,
+            pw_tangential_stiffness_ratio REAL,
             pw_cor REAL,
-            rolling_friction REAL,
+            pw_rolling_friction REAL,
             compression_pressure REAL,
             normal_force_model TEXT,
             tangential_force_model TEXT,
@@ -968,9 +1006,9 @@ def post_process(plot: Optional[bool] = True) -> None:
         )"""
         insert_query = f"""INSERT INTO results (
             case_n, p_radius, p_density, p_youngmod, p_poisson,
-            pp_dynamic_friction, pp_static_friction, pp_cor,
-            pw_dynamic_friction, pw_static_friction, pw_cor,
-            rolling_friction, compression_pressure,
+            pp_dynamic_friction, pp_static_friction, pp_cor, pp_surface_energy, pp_tangential_stiffness_ratio,
+            pw_dynamic_friction, pw_static_friction, pw_cor, pw_surface_energy, pw_tangential_stiffness_ratio,
+            pp_rolling_friction, pw_rolling_friction, compression_pressure,
             normal_force_model, tangential_force_model, adhesion_model,
             rolling_model, box_len, n_particles, shape_name, vert_ar, horiz_ar, n_corners,
             sq_degree, smoothness, bulk_density, compressed_density,
