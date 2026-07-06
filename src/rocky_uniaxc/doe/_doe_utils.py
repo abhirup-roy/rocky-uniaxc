@@ -247,9 +247,9 @@ def render_pyrocky_script(
         "normal_force_model": script_contxt["NORMAL_MODEL"].strip('"'),
         "tangential_force_model": script_contxt["TANG_MODEL"].strip('"'),
         "adhesion_model": script_contxt["ADH_MODEL"].strip('"'),
-        "rolling_fric_pp": script_contxt.get("ROLLING_FRICTION_PP", 0), # Default as 0, need to add a value with JSON for varying
-        "rolling_fric_pw": script_contxt.get("ROLLING_FRICTION_PW", 0),
-        "rolling_resistance_model": script_contxt["ROLLING_MODEL"].strip('"'),
+        "fric_rolling_pp": script_contxt.get("ROLLING_FRICTION_PP", 0),
+        "fric_rolling_pw": script_contxt.get("ROLLING_FRICTION_PW", 0),
+        "rolling_model": script_contxt["ROLLING_MODEL"].strip('"'),
         "processor": script_contxt["XPU"].strip('"'),
         "mesh_dir": mesh_path,
         "shape_name": script_contxt["SHAPE"].strip('"'),
@@ -288,8 +288,8 @@ def script_context_from_params(
     Returns:
         Dictionary of template variables for script rendering.
     """
-    rolling_fric_pp = params.fric_rolling_pp if params.fric_rolling_pp != "none" else 0 # Also default as 0 but vary in DoE
-    rolling_fric_pw = params.fric_rolling_pw if params.fric_rolling_pw != "none" else 0
+    fric_rolling_pp = params.fric_rolling_pp if params.fric_rolling_pp != "none" else 0
+    fric_rolling_pw = params.fric_rolling_pw if params.fric_rolling_pw != "none" else 0
 
     return {
         "RADIUS_P": params.radius,
@@ -321,8 +321,8 @@ def script_context_from_params(
         "SMOOTHNESS": params.shape.smoothness,
         "XPU": target,
         "MESH_DIR": meshdir,
-        "ROLLING_FRICTION_PP": rolling_fric_pp,
-        "ROLLING_FRICTION_PW": rolling_fric_pw
+        "ROLLING_FRICTION_PP": fric_rolling_pp,
+        "ROLLING_FRICTION_PW": fric_rolling_pw
     }
 
 

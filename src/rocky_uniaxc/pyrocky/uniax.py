@@ -362,12 +362,12 @@ class Settings:
             fric_stat_pp=inter["pp"]["fric_stat"],
             tan_stiff_r_pp=inter["pp"]["tan_stiff_r"],
             cor_pp=inter["pp"]["cor"],
-            rolling_fric_pp=inter["pp"].get("fric_rolling_pp", 0),
+            fric_rolling_pp=inter["pp"].get("fric_rolling_pp", 0),
             fric_dyn_pw=inter["pw"]["fric_dyn"],
             fric_stat_pw=inter["pw"]["fric_stat"],
             cor_pw=inter["pw"]["cor"],
             tan_stiff_r_pw=inter["pw"]["tan_stiff_r"],
-            rolling_fric_pw=inter["pw"].get("fric_rolling_pw", 0),
+            fric_rolling_pw=inter["pw"].get("fric_rolling_pw", 0),
             # Experiment settings
             particle_box_len=exp["box_len"],
             p_compress=exp["p_compress"],
@@ -609,8 +609,8 @@ class UniaxialCompressionSimulation:
         shape.particle2rocky(
             particle=self._particle,
             material=self._ser(pm),
-            rolling_friction_pp=self.settings.rolling_fric_pp,
-            rolling_friction_pw=self.settings.rolling_fric_pw,
+            fric_rolling_pp=self.settings.fric_rolling_pp,
+            fric_rolling_pw=self.settings.fric_rolling_pw,
         )
 
     def sim_physics(self):
