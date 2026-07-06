@@ -363,6 +363,7 @@ class Settings:
             tan_stiff_r_pp=inter["pp"]["tan_stiff_r"],
             cor_pp=inter["pp"]["cor"],
             fric_rolling_pp=inter["pp"].get("fric_rolling_pp", 0),
+            surf_en_pw=inter["pw"]["surf_en"],
             fric_dyn_pw=inter["pw"]["fric_dyn"],
             fric_stat_pw=inter["pw"]["fric_stat"],
             cor_pw=inter["pw"]["cor"],
