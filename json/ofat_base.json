@@ -14,6 +14,7 @@
     },
     "interactions": {
         "pp": {
+            "surf_en": 0.0,
             "fric_dyn": 0.7,
             "fric_stat": 0.3,
             "fric_rolling": 0.1,
@@ -21,6 +22,7 @@
             "cor": 0.4
         },
         "pw": {
+            "surf_en": 0.0,
             "fric_dyn": 0.7,
             "fric_stat": 0.3,
             "fric_rolling": 0.1,
