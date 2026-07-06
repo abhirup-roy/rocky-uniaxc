@@ -41,10 +41,10 @@ class Settings:
         p_density: Particle density (kg/m³).
         p_youngmod: Particle Young's modulus (Pa).
         p_poisson: Particle Poisson's ratio.
+        fric_rolling: Rolling friction coefficient.
         surf_en_pp: Surface energy for adhesion (cohesion) model (particle–particle) (J/m²).
         fric_dyn_pp: Dynamic friction coefficient (particle–particle).
         fric_stat_pp: Static friction coefficient (particle–particle).
-        fric_rolling_pp: Rolling friction coefficient (particle–particle).
         tan_stiff_r_pp: Tangential stiffness ratio (particle–particle).
         cor_pp: Coefficient of restitution (particle–particle).
         surf_en_pw: Surface energy for adhesion (cohesion) model (particle–wall) (J/m²).
