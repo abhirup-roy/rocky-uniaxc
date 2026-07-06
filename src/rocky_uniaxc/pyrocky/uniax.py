@@ -101,9 +101,9 @@ class Settings:
     adhesion_model: Literal["none", "constant", "linear", "JKR"] = (
         "JKR"
     )
-    # Rolling friction set to default 0.25 for both pp and pw for spherical particles, can be overridden in Settings
-    fric_rolling_pp: float = 0.25
-    fric_rolling_pw: float = 0.25
+    # Rolling friction set to default 0 for both pp and pw for spherical particles, can be overridden in Settings
+    fric_rolling_pp: float = 0
+    fric_rolling_pw: float = 0
     rolling_model: Literal["none", "type_a", "type_c"] = (
         "type_c"
     )
@@ -362,12 +362,12 @@ class Settings:
             fric_stat_pp=inter["pp"]["fric_stat"],
             tan_stiff_r_pp=inter["pp"]["tan_stiff_r"],
             cor_pp=inter["pp"]["cor"],
-            rolling_fric_pp=inter["pp"].get("fric_rolling_pp", 0.25),
+            rolling_fric_pp=inter["pp"].get("fric_rolling_pp", 0),
             fric_dyn_pw=inter["pw"]["fric_dyn"],
             fric_stat_pw=inter["pw"]["fric_stat"],
             cor_pw=inter["pw"]["cor"],
             tan_stiff_r_pw=inter["pw"]["tan_stiff_r"],
-            rolling_fric_pw=inter["pw"].get("fric_rolling_pw", 0.25),
+            rolling_fric_pw=inter["pw"].get("fric_rolling_pw", 0),
             # Experiment settings
             particle_box_len=exp["box_len"],
             p_compress=exp["p_compress"],

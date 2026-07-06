@@ -96,7 +96,7 @@ class Shape:
         else:
             self.size_type = size_type
 
-    def particle2rocky(self, particle: Any, material: Any, rolling_friction: float = 0.0) -> None:
+    def particle2rocky(self, particle: Any, material: Any, fric_rolling_pp: float = 0.0, fric_rolling_pw: float = 0.0) -> None:
         """Apply this shape's parameters to a Rocky particle object.
 
         Sets the size distribution, material, shape type, and optional
@@ -105,7 +105,8 @@ class Shape:
         Args:
             particle: A Rocky particle API object.
             material: Material proxy for the particle.
-            rolling_friction: Rolling friction coefficient. Defaults to 0.0.
+            fric_rolling_pp: Rolling friction coefficient between particle-particle. Defaults to 0.0.
+            fric_rolling_pw: Rolling friction coefficient between particle-wall. Defaults to 0.0.
 
         Raises:
             TypeError: If ``radius`` is not a float, int, or dict.
@@ -151,8 +152,10 @@ class Shape:
 
         # Set particle material
         particle.SetMaterial(material)
-        if rolling_friction != "none":
-            particle.SetRollingResistance(rolling_friction)
+        if fric_rolling_pp != "none":
+            particle.SetRollingResistance(fric_rolling_pp)
+        if fric_rolling_pw != "none":
+            particle.SetRollingResistance(fric_rolling_pw)
         else:
             raise TypeError("Radius must be a float, int or a dictionary.")
 
@@ -253,7 +256,7 @@ class CustomPolyhedron(Shape):
             self.stl_path = stl_path
         super().__init__(shape_type="custom_polyhedron", radius=radius)
 
-    def particle2rocky(self, particle: Any, material: Any, rolling_friction: float = 0.0) -> None:
+    def particle2rocky(self, particle: Any, material: Any, fric_rolling_pp: float = 0.0, fric_rolling_pw: float = 0.0) -> None:
         """Apply the custom polyhedron shape to a Rocky particle.
 
         Imports the STL geometry and assigns the material and rolling
@@ -262,7 +265,8 @@ class CustomPolyhedron(Shape):
         Args:
             particle: A Rocky particle API object.
             material: Material proxy for the particle.
-            rolling_friction: Rolling friction coefficient. Defaults to 0.0.
+            fric_rolling_pp: Rolling friction coefficient between particle-particle. Defaults to 0.0.
+            fric_rolling_pw: Rolling friction coefficient between particle-wall. Defaults to 0.0.
 
         Raises:
             ValueError: If no material is provided.
@@ -275,8 +279,10 @@ class CustomPolyhedron(Shape):
             raise ValueError("Material must be provided for custom polyhedron shapes.")
 
         particle.SetMaterial(material)
-        if rolling_friction != "none":
-            particle.SetRollingResistance(rolling_friction)
+        if fric_rolling_pp != "none":
+            particle.SetRollingResistance(fric_rolling_pp)
+        if fric_rolling_pw != "none":
+            particle.SetRollingResistance(fric_rolling_pw)
         else:
             raise TypeError("Radius must be a float, int or a dictionary.")
 

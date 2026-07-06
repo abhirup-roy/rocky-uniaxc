@@ -419,12 +419,12 @@ def launch_ofat(
         if exp_dict["fric_rolling_pp"] != "none":
             script_contxt["ROLLING_FRICTION_PP"] = exp_dict["fric_rolling_pp"]
         else:
-            script_contxt["ROLLING_FRICTION_PP"] = 0.25
+            script_contxt["ROLLING_FRICTION_PP"] = 0
 
         if exp_dict["fric_rolling_pw"] != "none":
             script_contxt["ROLLING_FRICTION_PW"] = exp_dict["fric_rolling_pw"]
         else:
-            script_contxt["ROLLING_FRICTION_PW"] = 0.25
+            script_contxt["ROLLING_FRICTION_PW"] = 0
 
         prepare_case(
             case_dir,
