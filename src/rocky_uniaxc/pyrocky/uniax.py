@@ -69,6 +69,7 @@ class Settings:
         particle_path: Path to an STL file for custom polyhedra.
         smoothness: Surface smoothness parameter.
     """
+
     project_dir: str | pathlib.Path
 
     particle_box_len: float
@@ -92,21 +93,14 @@ class Settings:
     tan_stiff_r_pw: float
     cor_pw: float
 
-    normal_force_model: Literal["linear_hysteresis", "hertz", "linear_spring"] = (
-        "hertz"
-    )
+    normal_force_model: Literal["linear_hysteresis", "hertz", "linear_spring"] = "hertz"
     tangential_force_model: Literal["coulomb_limit", "linear_spring_coulomb_limit"] = (
         "coulomb_limit"
     )
-    adhesion_model: Literal["none", "constant", "linear", "JKR"] = (
-        "JKR"
-    )
+    adhesion_model: Literal["none", "constant", "linear", "JKR"] = "JKR"
     # Rolling friction set to default 0 for both pp and pw for spherical particles, can be overridden in Settings
-    fric_rolling_pp: float = 0
-    fric_rolling_pw: float = 0
-    rolling_model: Literal["none", "type_a", "type_c"] = (
-        "type_c"
-    )
+    fric_rolling: float = 0
+    rolling_model: Literal["none", "type_a", "type_c"] = "type_c"
     neighbor_search: Literal["BVH", "RegularGrid", "SparseGrid"] = "BVH"
     processor: Literal["CPU", "GPU"] = "GPU"
 
@@ -198,8 +192,7 @@ class Settings:
             "surf_en_pw": self.surf_en_pw,
             "fric_dyn_pw": self.fric_dyn_pw,
             "fric_stat_pw": self.fric_stat_pw,
-            "fric_rolling_pp": self.fric_rolling_pp,
-            "fric_rolling_pw": self.fric_rolling_pw,
+            "fric_rolling": self.fric_rolling,
             "vert_ar": self.vert_ar,
             "horiz_ar": self.horiz_ar,
         }
@@ -356,19 +349,18 @@ class Settings:
             p_density=props["density"],
             p_poisson=props["poisson"],
             p_youngmod=props["youngmod"],
+            fric_rolling=props["pw"].get("fric_rolling", 0),
             # Interactions
             surf_en_pp=inter["pp"]["surf_en"],
             fric_dyn_pp=inter["pp"]["fric_dyn"],
             fric_stat_pp=inter["pp"]["fric_stat"],
             tan_stiff_r_pp=inter["pp"]["tan_stiff_r"],
             cor_pp=inter["pp"]["cor"],
-            fric_rolling_pp=inter["pp"].get("fric_rolling_pp", 0),
             surf_en_pw=inter["pw"]["surf_en"],
             fric_dyn_pw=inter["pw"]["fric_dyn"],
             fric_stat_pw=inter["pw"]["fric_stat"],
             cor_pw=inter["pw"]["cor"],
             tan_stiff_r_pw=inter["pw"]["tan_stiff_r"],
-            fric_rolling_pw=inter["pw"].get("fric_rolling_pw", 0),
             # Experiment settings
             particle_box_len=exp["box_len"],
             p_compress=exp["p_compress"],
@@ -610,8 +602,7 @@ class UniaxialCompressionSimulation:
         shape.particle2rocky(
             particle=self._particle,
             material=self._ser(pm),
-            fric_rolling_pp=self.settings.fric_rolling_pp,
-            fric_rolling_pw=self.settings.fric_rolling_pw,
+            fric_rolling=self.settings.fric_rolling,
         )
 
     def sim_physics(self):
@@ -894,15 +885,15 @@ class UniaxialCompressionSimulation:
         cube_selection = self._get_cropped_region(particles, time_step, sample_frac)
         contact_data = self._study.GetContactData()
 
-        all_contacts_x = contact_data.GetGridFunction("Contact : Coordinate : X").GetArray(
-            time_step=time_step
-        )
-        all_contacts_y = contact_data.GetGridFunction("Contact : Coordinate : Y").GetArray(
-            time_step=time_step
-        )
-        all_contacts_z = contact_data.GetGridFunction("Contact : Coordinate : Z").GetArray(
-            time_step=time_step
-        )
+        all_contacts_x = contact_data.GetGridFunction(
+            "Contact : Coordinate : X"
+        ).GetArray(time_step=time_step)
+        all_contacts_y = contact_data.GetGridFunction(
+            "Contact : Coordinate : Y"
+        ).GetArray(time_step=time_step)
+        all_contacts_z = contact_data.GetGridFunction(
+            "Contact : Coordinate : Z"
+        ).GetArray(time_step=time_step)
 
         x_rng, y_rng, z_rng = cube_selection.GetSize()
         x_center, y_center, z_center = cube_selection.GetCenter()
@@ -931,7 +922,13 @@ class UniaxialCompressionSimulation:
         sample_frac: float = 0.9,
         plot: bool = True,
         return_computed_metrics: bool = False,
-    ) -> tuple[Optional[float], Optional[float], Optional[float], Optional[float], Optional[float]]:
+    ) -> tuple[
+        Optional[float],
+        Optional[float],
+        Optional[float],
+        Optional[float],
+        Optional[float],
+    ]:
         """Post-process simulation results.
 
         Computes uncompressed and compressed bulk densities, contact numbers,
@@ -1047,7 +1044,15 @@ class UniaxialCompressionSimulation:
         sample_frac: float = 0.9,
         plot: bool = True,
         return_computed_metrics: bool = False,
-    ) -> Optional[tuple[Optional[float], Optional[float], Optional[float], Optional[float], Optional[float]]]:
+    ) -> Optional[
+        tuple[
+            Optional[float],
+            Optional[float],
+            Optional[float],
+            Optional[float],
+            Optional[float],
+        ]
+    ]:
         """Run the full simulation workflow from setup to post-processing.
 
         Sequentially calls :meth:`load_meshes`, :meth:`load_material_properties`,

@@ -73,16 +73,15 @@ def iter_ofat(
         params["particle_properties"]["density"],
         params["particle_properties"]["poisson"],
         params["particle_properties"]["youngmod"],
+        params["particle_properties"]["fric_rolling"],
         params["interactions"]["pp"]["surf_en"],
         params["interactions"]["pp"]["fric_dyn"],
         params["interactions"]["pp"]["fric_stat"],
-        params["interactions"]["pp"]["fric_rolling"],
         params["interactions"]["pp"]["tan_stiff_r"],
         params["interactions"]["pp"]["cor"],
         params["interactions"]["pw"]["surf_en"],
         params["interactions"]["pw"]["fric_dyn"],
         params["interactions"]["pw"]["fric_stat"],
-        params["interactions"]["pw"]["fric_rolling"],
         params["interactions"]["pw"]["tan_stiff_r"],
         params["interactions"]["pw"]["cor"],
         params["experim_settings"]["box_len"],
@@ -114,16 +113,15 @@ def iter_ofat(
         "density": params["particle_properties"]["density"],
         "poisson": params["particle_properties"]["poisson"],
         "youngmod": params["particle_properties"]["youngmod"],
+        "fric_rolling": params["particle_properties"]["fric_rolling"],
         "surf_en_pp": params["interactions"]["pp"]["surf_en"],
         "fric_dyn_pp": params["interactions"]["pp"]["fric_dyn"],
         "fric_stat_pp": params["interactions"]["pp"]["fric_stat"],
-        "fric_rolling_pp": params["interactions"]["pp"]["fric_rolling"],
         "tan_stiff_r_pp": params["interactions"]["pp"]["tan_stiff_r"],
         "cor_pp": params["interactions"]["pp"]["cor"],
         "surf_en_pw": params["interactions"]["pw"]["surf_en"],
         "fric_dyn_pw": params["interactions"]["pw"]["fric_dyn"],
         "fric_stat_pw": params["interactions"]["pw"]["fric_stat"],
-        "fric_rolling_pw": params["interactions"]["pw"]["fric_rolling"],
         "tan_stiff_r_pw": params["interactions"]["pw"]["tan_stiff_r"],
         "cor_pw": params["interactions"]["pw"]["cor"],
         "box_len": params["experim_settings"]["box_len"],
@@ -148,7 +146,7 @@ def iter_ofat(
         "surf_en_pp": (0, None),
         "fric_dyn_pp": (0, None),
         "fric_stat_pp": (0, None),
-        "fric_rolling_pp": (0, None),
+        "fric_rolling": (0, None),
         "tan_stiff_r_pp": (0, None),
         "cor_pp": (0, 1),
         "surf_en_pw": (0, None),
@@ -416,15 +414,10 @@ def launch_ofat(
             "SHAPES_MODULE_PATH": shapes_module_path,
         }
 
-        if exp_dict["fric_rolling_pp"] != "none":
-            script_contxt["ROLLING_FRICTION_PP"] = exp_dict["fric_rolling_pp"]
+        if exp_dict["fric_rolling"] != 0:
+            script_contxt["ROLLING_FRICTION"] = exp_dict["fric_rolling"]
         else:
-            script_contxt["ROLLING_FRICTION_PP"] = 0
-
-        if exp_dict["fric_rolling_pw"] != "none":
-            script_contxt["ROLLING_FRICTION_PW"] = exp_dict["fric_rolling_pw"]
-        else:
-            script_contxt["ROLLING_FRICTION_PW"] = 0
+            script_contxt["ROLLING_FRICTION"] = 0
 
         prepare_case(
             case_dir,

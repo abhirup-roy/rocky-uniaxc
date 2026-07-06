@@ -39,6 +39,7 @@ P_POISSON: float = {{POISSON_P}}  # Poisson ratio
 
 ROLLING_MODEL = "{{ROLLING_MODEL}}"  # 'type_1', 'type_3', 'none', 'custom'
 assert ROLLING_MODEL in ["type_1", "type_3", "none", "custom"]
+ROLLING_FRICTION: float = {{ROLLING_FRICTION}}
 
 # P-P / P-W properties
 PP_SURFACE_ENERGY: float = {{SURFACE_ENERGY_PP}}
@@ -46,13 +47,12 @@ PP_DYNAMIC_FRICTION: float = {{DYNAMIC_FRICTION_PP}}
 PP_STATIC_FRICTION: float = {{STATIC_FRICTION_PP}}
 PP_TANGENTIAL_STIFFNESS_RATIO: float = {{TANGENTIAL_STIFFNESS_RATIO_PP}}
 PP_COR: float = {{COR_PP}}
-PP_ROLLING_FRICTION: float = {{ROLLING_FRICTION_PP}}
 
 PW_SURFACE_ENERGY: float = {{SURFACE_ENERGY_PW}}
 PW_DYNAMIC_FRICTION: float = {{DYNAMIC_FRICTION_PW}}
 PW_STATIC_FRICTION: float = {{STATIC_FRICTION_PW}}
 PW_TANGENTIAL_STIFFNESS_RATIO: float = {{TANGENTIAL_STIFFNESS_RATIO_PW}}
-PW_ROLLING_FRICTION: float = {{ROLLING_FRICTION_PW}}
+
 PW_COR: float = {{COR_PW}}
 
 for i, _p in enumerate(
@@ -75,31 +75,23 @@ for i, _p in enumerate(
     if (i in [10, 11]) and (ROLLING_MODEL == "type_3") and (not _p):
         continue
 
-    if (i in [4, 9]) and (_p < 0 or _p > 1): # CORs
+    if (i in [4, 9]) and (_p < 0 or _p > 1):  # CORs
         raise ValueError(
             f"Expected a value between 0 and 1."
             f"Got {_p} for one of the particle properties."
         )
-    if (i in [3, 8]) and (_p < 0 or _p > 1): # Tangential Stiffness Ratio
+    if (i in [3, 8]) and (_p < 0 or _p > 1):  # Tangential Stiffness Ratio
         raise ValueError(
-            f"Expected a value between 0 and 1 for tangential stiffness ratio."
-            f"Got {_p}."
+            f"Expected a value between 0 and 1 for tangential stiffness ratio.Got {_p}."
         )
-    if (i == 12) and (_p < 0 or _p > 0.5): # Poisson
+    if (i == 12) and (_p < 0 or _p > 0.5):  # Poisson
         raise ValueError(
-            f"Expected a value between 0 and 0.5 for Poisson's ratio."
-            f"Got {_p}."
+            f"Expected a value between 0 and 0.5 for Poisson's ratio.Got {_p}."
         )
-    if (i in [1, 2, 6, 7, 10, 11]) and (_p < 0): # Frictions
-        raise ValueError(
-            f"Expected a non-negative value."
-            f"Got {_p} for friction."
-        )
-    if (i in [0, 5]) and (_p < 0): # Surface Energy
-        raise ValueError(
-            f"Expected a non-negative value."
-            f"Got {_p} for surface energy."
-        )
+    if (i in [1, 2, 6, 7, 10, 11]) and (_p < 0):  # Frictions
+        raise ValueError(f"Expected a non-negative value.Got {_p} for friction.")
+    if (i in [0, 5]) and (_p < 0):  # Surface Energy
+        raise ValueError(f"Expected a non-negative value.Got {_p} for surface energy.")
 
 # Contact models
 NORMAL_FORCE_MODEL = "{{NORMAL_MODEL}}"
@@ -352,11 +344,10 @@ def set_psd() -> None:
     particle.SetMaterial(particle_mat)
     if PP_ROLLING_FRICTION != "none":
         particle.SetRollingResistance(PP_ROLLING_FRICTION)
-        
+
     particle.SetMaterial(particle_mat)
     if PW_ROLLING_FRICTION != "none":
         particle.SetRollingResistance(PW_ROLLING_FRICTION)
-
 
 
 def gen_particle(shape_dict: dict[str, float | str]) -> None:
@@ -412,10 +403,7 @@ def gen_particle(shape_dict: dict[str, float | str]) -> None:
 
     # Instantiate the shape for the particle
     shape_obj.particle2rocky(
-        particle=particle,
-        material=particle_mat,
-        fric_rolling_pp=PP_ROLLING_FRICTION,
-        fric_rolling_pw=PW_ROLLING_FRICTION,
+        particle=particle, material=particle_mat, fric_rolling=ROLLING_FRICTION
     )
 
 
@@ -449,7 +437,9 @@ def insertion_settings(insert=True) -> None:
 
     fill_box_vol = PARTICLE_BOX_LEN**3  # m^3
     if isinstance(P_RADIUS, dict):
-        particle_vol = sum((4/3) * np.pi * r**3 * p for r, p in P_RADIUS.items()) / sum(P_RADIUS.values())
+        particle_vol = sum(
+            (4 / 3) * np.pi * r**3 * p for r, p in P_RADIUS.items()
+        ) / sum(P_RADIUS.values())
     else:
         particle_vol = (4 / 3) * np.pi * P_RADIUS**3  # m^3
     # 0.6 is an avg packing fraction of spherical particles
@@ -784,8 +774,12 @@ def post_process(plot: Optional[bool] = True) -> None:
         particles, settled_timestep, 0.9
     )
     compr_mean_stress, compr_dev_stress = _calc_shear_strength(particles, -1, 0.9)
-    uncompr_stress_ratio = uncompr_dev_stress / uncompr_mean_stress if uncompr_mean_stress != 0 else 0
-    compr_stress_ratio = compr_dev_stress / compr_mean_stress if compr_mean_stress != 0 else 0
+    uncompr_stress_ratio = (
+        uncompr_dev_stress / uncompr_mean_stress if uncompr_mean_stress != 0 else 0
+    )
+    compr_stress_ratio = (
+        compr_dev_stress / compr_mean_stress if compr_mean_stress != 0 else 0
+    )
 
     bulk_dens = []
     contacts = []
