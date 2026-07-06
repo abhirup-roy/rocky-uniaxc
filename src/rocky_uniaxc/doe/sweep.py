@@ -55,13 +55,18 @@ def iter_params(json_path: str) -> list[SimParams]:
         params["particle_properties"]["density"],
         params["particle_properties"]["poisson"],
         params["particle_properties"]["youngmod"],
-        params["inseractions"]["pp"]["fric_dyn"],
-        params["inseractions"]["pp"]["fric_stat"],
-        params["inseractions"]["pp"]["fric_rolling"],
-        params["inseractions"]["pp"]["cor"],
-        params["inseractions"]["pw"]["fric_dyn"],
-        params["inseractions"]["pw"]["fric_stat"],
-        params["inseractions"]["pw"]["cor"],
+        params["interactions"]["pp"]["surf_en"],
+        params["interactions"]["pp"]["fric_dyn"],
+        params["interactions"]["pp"]["fric_stat"],
+        params["interactions"]["pp"]["fric_rolling"],
+        params["interactions"]["pp"]["tan_stiff_r"],
+        params["interactions"]["pp"]["cor"],
+        params["interactions"]["pw"]["surf_en"],
+        params["interactions"]["pw"]["fric_dyn"],
+        params["interactions"]["pw"]["fric_stat"],
+        params["interactions"]["pw"]["fric_rolling"],
+        params["interactions"]["pw"]["tan_stiff_r"],
+        params["interactions"]["pw"]["cor"],
         params["experim_settings"]["box_len"],
         params["experim_settings"]["p_compress"],
         params["contact_model"]["normal"],
@@ -72,7 +77,7 @@ def iter_params(json_path: str) -> list[SimParams]:
     )
 
     return [
-        SimParams.from_tuple(combo[:17], shape=combo[17])
+        SimParams.from_tuple(combo[:22], shape=combo[22])
         for combo in param_combinations
     ]
 
