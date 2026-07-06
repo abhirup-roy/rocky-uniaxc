@@ -1,0 +1,43 @@
+{
+    "shape": {
+        "name": "polyhedron",
+        "vert_ar": 1,
+        "horiz_ar": 1,
+        "n_corners": 10,
+        "sq_degree": 2.0
+    },
+    "particle_properties": {
+        "radius": 150e-6,
+        "density": 2700,
+        "poisson": 0.25,
+        "youngmod": 5e6
+    },
+    "interactions": {
+        "pp": {
+            "surf_en": 0.0,
+            "fric_dyn": 0.7,
+            "fric_stat": 0.3,
+            "fric_rolling": 0.1,
+            "tan_stiff_r": 1.0,
+            "cor": 0.4
+        },
+        "pw": {
+            "surf_en": 0.0,
+            "fric_dyn": 0.7,
+            "fric_stat": 0.3,
+            "fric_rolling": 0.1,
+            "tan_stiff_r": 1.0,
+            "cor": 0.4
+        }
+    },
+    "experim_settings": {
+        "box_len": 0.0075,
+        "p_compress": 15e3
+    },
+    "contact_model": {
+        "normal": "damped_hertzian",
+        "tangential": "coulomb_limit",
+        "rolling": "none",
+        "adhesion": "JKR"
+    }
+}
