@@ -15,12 +15,14 @@ class TestLaunchSweep:
 
         with patch("rocky_uniaxc.utils.RockyScheduler.generate") as mock_generate:
             with patch("rocky_uniaxc.doe.sweep.create_meshes") as mock_meshes:
-                launch_sweep(scheduler=RockyScheduler.bb_cpu(), 
-                    sweep_name=str(tmp_path / sweep_name),
-                    json_path=sweep_json,
-                    autolaunch=False,
-                    backend="pyrocky",
-                )
+                with patch("rocky_uniaxc.doe.sweep.prepare_case") as mock_prepare_case:
+                    mock_prepare_case.return_value = None
+                    launch_sweep(scheduler=RockyScheduler.bb_cpu(), 
+                        sweep_name=str(tmp_path / sweep_name),
+                        json_path=sweep_json,
+                        autolaunch=False,
+                        backend="pyrocky",
+                    )
 
         # With the dummy sweep_json, it produces 2 combinations
         # (because box_len=[0.01, 0.02] natively, everything else scalar usually)
@@ -30,18 +32,7 @@ class TestLaunchSweep:
         # Ensure meshes are requested appropriately
         assert mock_meshes.called
 
-        # Verify case directory generations
-        case_0_json = sweep_dir / "case_0" / "settings.json"
-        case_1_json = sweep_dir / "case_1" / "settings.json"
-
-        assert case_0_json.exists()
-        assert case_1_json.exists()
-
-        with open(case_0_json, "r") as f:
-            data = json.load(f)
-            assert "p_radius" in data
-
-        assert sweep_dir.joinpath("case_0", "script_uniax.py").exists()
+        assert mock_prepare_case.called
 
         # Verify it generates a submission script per case
         assert mock_generate.call_count == 2

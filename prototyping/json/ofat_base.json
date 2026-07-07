@@ -18,7 +18,7 @@
             "fric_dyn": 0.7,
             "fric_stat": 0.3,
             "fric_rolling": 0.1,
-            "tan_stiff_r" : 1.0,
+            "tan_stiff_r": 1.0,
             "cor": 0.4
         },
         "pw": {
@@ -26,18 +26,18 @@
             "fric_dyn": 0.7,
             "fric_stat": 0.3,
             "fric_rolling": 0.1,
-            "tan_stiff_r" : 1.0,
+            "tan_stiff_r": 1.0,
             "cor": 0.4
         }
     },
     "experim_settings": {
-        "box_len": 0.0025,
+        "box_len": 0.0075,
         "p_compress": 15e3
     },
     "contact_model": {
-        "normal": "linear_hysteresis",
+        "normal": "damped_hertzian",
         "tangential": "coulomb_limit",
         "rolling": "none",
-        "adhesion": "none"
+        "adhesion": "JKR"
     }
 }

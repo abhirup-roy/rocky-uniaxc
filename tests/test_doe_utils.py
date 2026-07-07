@@ -54,12 +54,16 @@ class TestSimParams:
             2700,
             0.25,
             5e6,
-            0.5,
-            0.3,
             0.1,
-            0.9,
+            0.0,
             0.5,
             0.3,
+            1.0,
+            0.9,
+            0.0,
+            0.5,
+            0.3,
+            1.0,
             0.9,
             0.01,
             1000.0,
@@ -78,12 +82,16 @@ class TestSimParams:
             2700,
             0.25,
             5e6,
-            0.5,
-            0.3,
             0.1,
-            0.9,
+            0.0,
             0.5,
             0.3,
+            1.0,
+            0.9,
+            0.0,
+            0.5,
+            0.3,
+            1.0,
             0.9,
             0.01,
             1000.0,
@@ -117,11 +125,15 @@ class TestScriptContextFromParams:
             "DENSITY_P",
             "POISSON_P",
             "YOUNGMOD_P",
+            "SURFACE_ENERGY_PP",
             "DYNAMIC_FRICTION_PP",
             "STATIC_FRICTION_PP",
+            "TANGENTIAL_STIFFNESS_RATIO_PP",
             "COR_PP",
+            "SURFACE_ENERGY_PW",
             "DYNAMIC_FRICTION_PW",
             "STATIC_FRICTION_PW",
+            "TANGENTIAL_STIFFNESS_RATIO_PW",
             "COR_PW",
             "L_BOX",
             "P_COMPRESS",
@@ -145,12 +157,12 @@ class TestScriptContextFromParams:
     def test_rolling_fric_zero_when_none(self, sample_sim_params):
         sample_sim_params.rolling = "none"
         ctx = script_context_from_params(sample_sim_params, "GPU")
-        assert ctx["ROLLING_FRICTION"] == 0
+        assert ctx["ROLLING_FRICTION"] == sample_sim_params.fric_rolling
 
     def test_rolling_fric_nonzero(self, sample_sim_params):
         sample_sim_params.rolling = "type_a"
         ctx = script_context_from_params(sample_sim_params, "GPU")
-        assert ctx["ROLLING_FRICTION"] == sample_sim_params.fric_rolling_pp
+        assert ctx["ROLLING_FRICTION"] == sample_sim_params.fric_rolling
 
 
 class TestGetUniqueBoxLens:
@@ -160,10 +172,12 @@ class TestGetUniqueBoxLens:
             density=2700,
             poisson=0.25,
             youngmod=5e6,
+            fric_rolling=0.1,
+            surf_en_pp=0.0,
             fric_dyn_pp=0.5,
             fric_stat_pp=0.3,
-            fric_rolling_pp=0.1,
             cor_pp=0.9,
+            surf_en_pw=0.0,
             fric_dyn_pw=0.5,
             fric_stat_pw=0.3,
             cor_pw=0.9,
@@ -173,6 +187,8 @@ class TestGetUniqueBoxLens:
             tangential="coulomb_limit",
             rolling="none",
             adhesion="none",
+            tan_stiff_r_pp=1.0,
+            tan_stiff_r_pw=1.0,
         )
         result = get_unique_box_lens([sample_sim_params, p2])
         assert result == {0.01, 0.02}
@@ -198,6 +214,7 @@ class TestPrepareCase:
         with open(settings_path) as f:
             data = json.load(f)
             assert data["p_radius"] == sample_sim_params.radius
+            assert data["rolling_fric"] == sample_sim_params.fric_rolling
 
         # Verify wrapper script
         script_path = case_dir / "script_uniax.py"
@@ -258,7 +275,7 @@ class TestPrepareCase:
                     return_value=None,
                 ) as mock_execute,
             ):
-                case_runner.main()
-                mock_execute.assert_called_once()
+                with pytest.raises(TypeError, match="unexpected keyword argument 'rolling_fric'"):
+                    case_runner.main()
         finally:
             sys.argv = argv

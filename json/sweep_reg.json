@@ -22,7 +22,7 @@
             5e6
         ]
     },
-    "inseractions": {
+    "interactions": {
         "pp": {
             "fric_dyn": [
                 0.7
