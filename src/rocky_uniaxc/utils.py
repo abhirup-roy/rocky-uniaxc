@@ -35,9 +35,9 @@ _BEAR_COMMANDS = (
     "set -e\n\n"
     "module purge; module load bluebear\n"
     "module load bear-apps/2024a\n"
-    "module load ANSYS_Rocky/2026R1\n"
+    "module load ANSYS_Rocky/2025R2\n"
 )
-_AZ_COMMANDS = "set -e\n\nml rocky/26.1.0\n"
+_AZ_COMMANDS = "set -e\n\nml rocky/25.2.0\n"
 _DEFAULT_ACCOUNT = "windowcr-astrazeneca-abhi"
 
 
