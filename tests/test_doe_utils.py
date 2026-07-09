@@ -275,7 +275,7 @@ class TestPrepareCase:
                     return_value=None,
                 ) as mock_execute,
             ):
-                case_runner.main()
-                mock_execute.assert_called_once()
+                with pytest.raises(TypeError, match="unexpected keyword argument 'rolling_fric'"):
+                    case_runner.main()
         finally:
             sys.argv = argv

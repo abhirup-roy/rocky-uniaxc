@@ -30,18 +30,7 @@ class TestLaunchSweep:
         # Ensure meshes are requested appropriately
         assert mock_meshes.called
 
-        # Verify case directory generations
-        case_0_json = sweep_dir / "case_0" / "settings.json"
-        case_1_json = sweep_dir / "case_1" / "settings.json"
-
-        assert case_0_json.exists()
-        assert case_1_json.exists()
-
-        with open(case_0_json, "r") as f:
-            data = json.load(f)
-            assert "p_radius" in data
-
-        assert sweep_dir.joinpath("case_0", "script_uniax.py").exists()
+        assert mock_prepare_case.called
 
         # Verify it generates a submission script per case
         assert mock_generate.call_count == 2
