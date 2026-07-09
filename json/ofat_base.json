@@ -10,23 +10,22 @@
         "radius": 150e-6,
         "density": 2700,
         "poisson": 0.25,
-        "youngmod": 5e6
+        "youngmod": 5e6,
+        "fric_rolling": 0.1
     },
     "interactions": {
         "pp": {
             "surf_en": 0.0,
             "fric_dyn": 0.7,
             "fric_stat": 0.3,
-            "fric_rolling": 0.1,
-            "tan_stiff_r" : 1.0,
+            "tan_stiff_r": 1.0,
             "cor": 0.4
         },
         "pw": {
             "surf_en": 0.0,
             "fric_dyn": 0.7,
             "fric_stat": 0.3,
-            "fric_rolling": 0.1,
-            "tan_stiff_r" : 1.0,
+            "tan_stiff_r": 1.0,
             "cor": 0.4
         }
     },

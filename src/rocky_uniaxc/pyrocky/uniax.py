@@ -50,7 +50,6 @@ class Settings:
         surf_en_pw: Surface energy for adhesion (cohesion) model (particle–wall) (J/m²).
         fric_dyn_pw: Dynamic friction coefficient (particle–wall).
         fric_stat_pw: Static friction coefficient (particle–wall).
-        fric_rolling_pw: Rolling friction coefficient (particle–wall).
         tan_stiff_r_pw: Tangential stiffness ratio (particle–wall).
         cor_pw: Coefficient of restitution (particle–wall).
         normal_force_model: Normal contact force model.
@@ -349,7 +348,7 @@ class Settings:
             p_density=props["density"],
             p_poisson=props["poisson"],
             p_youngmod=props["youngmod"],
-            fric_rolling=props["pw"].get("fric_rolling", 0),
+            fric_rolling=props.get("fric_rolling", 0),
             # Interactions
             surf_en_pp=inter["pp"]["surf_en"],
             fric_dyn_pp=inter["pp"]["fric_dyn"],

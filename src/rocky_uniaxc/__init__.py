@@ -14,6 +14,7 @@ __author__ = "Abhirup Roy"
 __all__ = [
     "launch_sweep",
     "launch_ofat",
+    "launch_space_filling",
     "analyse",
     "externals",
     "pyrocky",
@@ -27,7 +28,7 @@ ROCKY_EXE_PATH = None
 import pathlib as _pathlib
 from .doe.sweep import launch_sweep
 from .doe.ofat import launch_ofat
-# from .doe.sobol import launch_sobol
+from .doe.space_filling import launch_space_filling
 from .utils import RockyScheduler
 # from .doe import med
 from . import sweep_analysis as analyse

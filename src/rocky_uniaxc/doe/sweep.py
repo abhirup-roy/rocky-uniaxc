@@ -55,16 +55,15 @@ def iter_params(json_path: str) -> list[SimParams]:
         params["particle_properties"]["density"],
         params["particle_properties"]["poisson"],
         params["particle_properties"]["youngmod"],
+        params["particle_properties"]["fric_rolling"],
         params["interactions"]["pp"]["surf_en"],
         params["interactions"]["pp"]["fric_dyn"],
         params["interactions"]["pp"]["fric_stat"],
-        params["interactions"]["pp"]["fric_rolling"],
         params["interactions"]["pp"]["tan_stiff_r"],
         params["interactions"]["pp"]["cor"],
         params["interactions"]["pw"]["surf_en"],
         params["interactions"]["pw"]["fric_dyn"],
         params["interactions"]["pw"]["fric_stat"],
-        params["interactions"]["pw"]["fric_rolling"],
         params["interactions"]["pw"]["tan_stiff_r"],
         params["interactions"]["pw"]["cor"],
         params["experim_settings"]["box_len"],
@@ -77,7 +76,7 @@ def iter_params(json_path: str) -> list[SimParams]:
     )
 
     return [
-        SimParams.from_tuple(combo[:22], shape=combo[22])
+        SimParams.from_tuple(combo[:21], shape=combo[21])
         for combo in param_combinations
     ]
 
@@ -120,6 +119,56 @@ def launch_sweep(
         ValueError: If an unsupported backend or target is specified.
         FileNotFoundError: If ``template_dir`` does not exist.
     """
+    all_params = list(iter_params(json_path))
+    launch_param_cases(
+        sweep_name,
+        scheduler,
+        all_params,
+        meshdir=meshdir,
+        template_dir=template_dir,
+        autolaunch=autolaunch,
+        target=target,
+        backend=backend,
+    )
+
+
+def launch_param_cases(
+    sweep_name: str,
+    scheduler: RockyScheduler,
+    all_params: list[SimParams],
+    meshdir: str = "meshes",
+    template_dir: Optional[str | os.PathLike] = None,
+    autolaunch: bool = True,
+    target: str = "GPU",
+    backend: Optional[str] = None,
+) -> list[Path]:
+    """Generate and (optionally) launch cases for a pre-computed parameter list.
+
+    Shared backend by every DOE design that produces a flat list of
+    :class:`SimParams` (full-factorial sweep, Sobol / Latin Hypercube
+    space-filling). Meshes are generated once per unique box length and shared
+    across the cases that use them.
+
+    Args:
+        sweep_name: Title of the study, used as the root directory name.
+        scheduler: :class:`~rocky_uniaxc.utils.RockyScheduler` describing the
+            SLURM configuration for each case.
+        all_params: Parameter combinations to turn into cases.
+        meshdir: Name of the mesh subdirectory inside each case.
+        template_dir: Optional path to a directory of custom Jinja2 templates.
+        autolaunch: Whether to submit the SLURM jobs after setup.
+        target: Compute target — ``"CPU"`` or ``"GPU"``.
+        backend: Simulation backend — ``"rocky_prepost"`` or ``"pyrocky"``.
+            Defaults to the package-level :data:`BACKEND` setting.
+
+    Returns:
+        The list of created case directories.
+
+    Raises:
+        ValueError: If an unsupported backend or target is specified.
+        FileNotFoundError: If ``template_dir`` does not exist.
+        NotImplementedError: If ``target="MULTI_GPU"`` is requested.
+    """
     if backend is None:
         from .. import BACKEND
 
@@ -156,7 +205,6 @@ def launch_sweep(
         )
     rocky_template = rocky_templ_env.get_template("template_uniax.py")
 
-    all_params = list(iter_params(json_path))
     total_cases = len(all_params)
 
     sweep_path = Path(sweep_name)
@@ -202,3 +250,5 @@ def launch_sweep(
 
     if autolaunch:
         scheduler.launch_all([str(d) for d in case_dirs])
+
+    return case_dirs

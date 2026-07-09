@@ -22,6 +22,7 @@ from . import shapes_module_path
 from ._doe_utils import (
     case_directory,
     prepare_case,
+    resolve_base_params,
 )
 from ..compr_meshgen import create_meshes
 from ..utils import RockyScheduler
@@ -108,34 +109,7 @@ def iter_ofat(
             "OFAT values must contain 'parameters', 'test_range', and 'hold_values' keys."
         )
 
-    ofat_base_valid = {
-        "radius": params["particle_properties"]["radius"],
-        "density": params["particle_properties"]["density"],
-        "poisson": params["particle_properties"]["poisson"],
-        "youngmod": params["particle_properties"]["youngmod"],
-        "fric_rolling": params["particle_properties"]["fric_rolling"],
-        "surf_en_pp": params["interactions"]["pp"]["surf_en"],
-        "fric_dyn_pp": params["interactions"]["pp"]["fric_dyn"],
-        "fric_stat_pp": params["interactions"]["pp"]["fric_stat"],
-        "tan_stiff_r_pp": params["interactions"]["pp"]["tan_stiff_r"],
-        "cor_pp": params["interactions"]["pp"]["cor"],
-        "surf_en_pw": params["interactions"]["pw"]["surf_en"],
-        "fric_dyn_pw": params["interactions"]["pw"]["fric_dyn"],
-        "fric_stat_pw": params["interactions"]["pw"]["fric_stat"],
-        "tan_stiff_r_pw": params["interactions"]["pw"]["tan_stiff_r"],
-        "cor_pw": params["interactions"]["pw"]["cor"],
-        "box_len": params["experim_settings"]["box_len"],
-        "p_compress": params["experim_settings"]["p_compress"],
-        "normal": params["contact_model"]["normal"],
-        "tangential": params["contact_model"]["tangential"],
-        "rolling": params["contact_model"]["rolling"],
-        "adhesion": params["contact_model"]["adhesion"],
-        "shape": params["shape"]["name"],
-        "vert_ar": params["shape"]["vert_ar"],
-        "horiz_ar": params["shape"]["horiz_ar"],
-        "n_corners": params["shape"]["n_corners"],
-        "sq_degree": params["shape"]["sq_degree"],
-    }
+    ofat_base_valid = resolve_base_params(params)
 
     if not set(ofat_values["parameters"]).issubset(set(ofat_base_valid.keys())):
         raise ValueError(
@@ -152,7 +126,6 @@ def iter_ofat(
         "surf_en_pw": (0, None),
         "fric_dyn_pw": (0, None),
         "fric_stat_pw": (0, None),
-        "fric_rolling_pw": (0, None),
         "tan_stiff_r_pw": (0, None),
         "cor_pw": (0, 1),
         "box_len": (0, None),
@@ -414,10 +387,7 @@ def launch_ofat(
             "SHAPES_MODULE_PATH": shapes_module_path,
         }
 
-        if exp_dict["fric_rolling"] != 0:
-            script_contxt["ROLLING_FRICTION"] = exp_dict["fric_rolling"]
-        else:
-            script_contxt["ROLLING_FRICTION"] = 0
+        script_contxt["ROLLING_FRICTION"] = exp_dict["fric_rolling"]
 
         prepare_case(
             case_dir,
