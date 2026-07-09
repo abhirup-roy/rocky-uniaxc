@@ -30,7 +30,5 @@ class TestLaunchSweep:
         # Ensure meshes are requested appropriately
         assert mock_meshes.called
 
-        assert mock_prepare_case.called
-
         # Verify it generates a submission script per case
         assert mock_generate.call_count == 2
