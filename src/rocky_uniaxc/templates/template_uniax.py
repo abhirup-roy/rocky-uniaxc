@@ -37,8 +37,8 @@ P_DENSITY: float = {{DENSITY_P}}  # kg/m^3
 P_YOUNGMOD: float = {{YOUNGMOD_P}}  # Pa
 P_POISSON: float = {{POISSON_P}}  # Poisson ratio
 
-ROLLING_MODEL = "{{ROLLING_MODEL}}"  # 'type_1', 'type_3', 'none', 'custom'
-assert ROLLING_MODEL in ["type_1", "type_3", "none", "custom"]
+ROLLING_MODEL = "{{ROLLING_MODEL}}"  # 'type_a', 'type_c', 'none', 'custom'
+assert ROLLING_MODEL in ["type_a", "type_c", "none", "custom"]
 ROLLING_FRICTION: float = {{ROLLING_FRICTION}}
 
 # P-P / P-W properties
@@ -71,7 +71,7 @@ for i, _p in enumerate(
         P_POISSON,
     ]
 ):
-    if (i in [10, 11]) and (ROLLING_MODEL == "type_3") and (not _p):
+    if (i in [10]) and (ROLLING_MODEL == "type_c") and (not _p):
         continue
 
     if (i in [4, 9]) and (_p < 0 or _p > 1):  # CORs
@@ -83,11 +83,11 @@ for i, _p in enumerate(
         raise ValueError(
             f"Expected a value between 0 and 1 for tangential stiffness ratio.Got {_p}."
         )
-    if (i == 12) and (_p < 0 or _p > 0.5):  # Poisson
+    if (i == 11) and (_p < 0 or _p > 0.5):  # Poisson
         raise ValueError(
             f"Expected a value between 0 and 0.5 for Poisson's ratio.Got {_p}."
         )
-    if (i in [1, 2, 6, 7, 10, 11]) and (_p < 0):  # Frictions
+    if (i in [1, 2, 6, 7, 10]) and (_p < 0):  # Frictions
         raise ValueError(f"Expected a non-negative value.Got {_p} for friction.")
     if (i in [0, 5]) and (_p < 0):  # Surface Energy
         raise ValueError(f"Expected a non-negative value.Got {_p} for surface energy.")

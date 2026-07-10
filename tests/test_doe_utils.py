@@ -214,7 +214,7 @@ class TestPrepareCase:
         with open(settings_path) as f:
             data = json.load(f)
             assert data["p_radius"] == sample_sim_params.radius
-            assert data["rolling_fric"] == sample_sim_params.fric_rolling
+            assert data["fric_rolling"] == sample_sim_params.fric_rolling
 
         # Verify wrapper script
         script_path = case_dir / "script_uniax.py"
@@ -275,7 +275,7 @@ class TestPrepareCase:
                     return_value=None,
                 ) as mock_execute,
             ):
-                with pytest.raises(TypeError, match="unexpected keyword argument 'rolling_fric'"):
-                    case_runner.main()
+                case_runner.main()
+                assert mock_execute.called
         finally:
             sys.argv = argv

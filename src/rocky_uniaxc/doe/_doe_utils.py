@@ -136,7 +136,7 @@ class SimParams:
         """Create a SimParams from a parameter tuple and a shape specification.
 
         Args:
-            params: A 20-element tuple of simulation parameters in the
+            params: A 21-element tuple of simulation parameters in the
                 canonical order (radius, density, …, adhesion).
             shape: A :class:`ShapeConfig` instance or a dictionary that can
                 be passed to :meth:`ShapeConfig.from_dict`.
@@ -170,6 +170,49 @@ class SimParams:
             adhesion=params[20],
             shape=shape,
         )
+
+
+def resolve_base_params(params: dict) -> dict:
+    """Flatten a nested DOE JSON config into a single-level parameter dict.
+
+    Shared by OFAT and space-filling designs, which both read scalar base
+    values from a configuration where every leaf is a single value (not a
+    list of levels as in the full-factorial sweep config).
+
+    Args:
+        params: Parsed DOE JSON configuration (nested dict).
+
+    Returns:
+        Flat dict mapping canonical parameter names to their base values.
+    """
+    return {
+        "radius": params["particle_properties"]["radius"],
+        "density": params["particle_properties"]["density"],
+        "poisson": params["particle_properties"]["poisson"],
+        "youngmod": params["particle_properties"]["youngmod"],
+        "fric_rolling": params["particle_properties"]["fric_rolling"],
+        "surf_en_pp": params["interactions"]["pp"]["surf_en"],
+        "fric_dyn_pp": params["interactions"]["pp"]["fric_dyn"],
+        "fric_stat_pp": params["interactions"]["pp"]["fric_stat"],
+        "tan_stiff_r_pp": params["interactions"]["pp"]["tan_stiff_r"],
+        "cor_pp": params["interactions"]["pp"]["cor"],
+        "surf_en_pw": params["interactions"]["pw"]["surf_en"],
+        "fric_dyn_pw": params["interactions"]["pw"]["fric_dyn"],
+        "fric_stat_pw": params["interactions"]["pw"]["fric_stat"],
+        "tan_stiff_r_pw": params["interactions"]["pw"]["tan_stiff_r"],
+        "cor_pw": params["interactions"]["pw"]["cor"],
+        "box_len": params["experim_settings"]["box_len"],
+        "p_compress": params["experim_settings"]["p_compress"],
+        "normal": params["contact_model"]["normal"],
+        "tangential": params["contact_model"]["tangential"],
+        "rolling": params["contact_model"]["rolling"],
+        "adhesion": params["contact_model"]["adhesion"],
+        "shape": params["shape"]["name"],
+        "vert_ar": params["shape"]["vert_ar"],
+        "horiz_ar": params["shape"]["horiz_ar"],
+        "n_corners": params["shape"]["n_corners"],
+        "sq_degree": params["shape"]["sq_degree"],
+    }
 
 
 @contextmanager
@@ -250,10 +293,10 @@ def render_pyrocky_script(
         "normal_force_model": script_contxt["NORMAL_MODEL"].strip('"'),
         "tangential_force_model": script_contxt["TANG_MODEL"].strip('"'),
         "adhesion_model": script_contxt["ADH_MODEL"].strip('"'),
-        "rolling_fric": script_contxt.get(
+        "fric_rolling": script_contxt.get(
             "ROLLING_FRICTION", 0
         ),  # Default as 0, need to add a value with JSON for varying
-        "rolling_resistance_model": script_contxt["ROLLING_MODEL"].strip('"'),
+        "rolling_model": script_contxt["ROLLING_MODEL"].strip('"'),
         "processor": script_contxt["XPU"].strip('"'),
         "mesh_dir": mesh_path,
         "shape_name": script_contxt["SHAPE"].strip('"'),

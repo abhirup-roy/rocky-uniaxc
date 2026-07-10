@@ -168,7 +168,6 @@ def sweep_json(tmp_path):
             "pp": {
                 "fric_dyn": [0.5],
                 "fric_stat": [0.3],
-                "fric_rolling": [0.1],
                 "surf_en": [0.0],
                 "tan_stiff_r": [1.0],
                 "cor": [0.9],
@@ -176,7 +175,6 @@ def sweep_json(tmp_path):
             "pw": {
                 "fric_dyn": [0.5],
                 "fric_stat": [0.3],
-                "fric_rolling": [0.1],
                 "surf_en": [0.0],
                 "tan_stiff_r": [1.0],
                 "cor": [0.9],
@@ -218,7 +216,6 @@ def ofat_json(tmp_path):
                 "surf_en": 0.0,
                 "fric_dyn": 0.7,
                 "fric_stat": 0.3,
-                "fric_rolling": 0.1,
                 "tan_stiff_r": 1.0,
                 "cor": 0.4,
             },
@@ -226,7 +223,6 @@ def ofat_json(tmp_path):
                 "surf_en": 0.0,
                 "fric_dyn": 0.7,
                 "fric_stat": 0.3,
-                "fric_rolling": 0.1,
                 "tan_stiff_r": 1.0,
                 "cor": 0.4,
             },

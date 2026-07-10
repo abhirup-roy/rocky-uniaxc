@@ -156,10 +156,7 @@ class Shape:
 
         # Set particle material
         particle.SetMaterial(material)
-        if fric_rolling != "none":
-            particle.SetRollingResistance(fric_rolling)
-        else:
-            raise TypeError("Radius must be a float, int or a dictionary.")
+        particle.SetRollingResistance(fric_rolling)
 
         particle.SetShape(self.shape_type)
         particle.SetSizeType(self.size_type)
@@ -285,10 +282,7 @@ class CustomPolyhedron(Shape):
             raise ValueError("Material must be provided for custom polyhedron shapes.")
 
         particle.SetMaterial(material)
-        if fric_rolling != 0.0:
-            particle.SetRollingResistance(fric_rolling)
-        else:
-            raise TypeError("Radius must be a float, int or a dictionary.")
+        particle.SetRollingResistance(fric_rolling)
 
         particle.SetShape(self.shape_type)
         particle.SetSizeType(self.size_type)
