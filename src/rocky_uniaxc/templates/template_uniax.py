@@ -556,7 +556,10 @@ def _select_processor(solver, processor: str) -> None:
         solver.SetNumberOfProcessors(NPROCS)
 
 
-def simulate(insert: bool = True, autotimestep: bool = True, timestep=None) -> None:
+def simulate(
+    insert: bool = True,
+    autotimestep: bool = True,
+) -> None:
     """Start the uniaxial compression simulation.
 
     Args:
@@ -576,13 +579,10 @@ def simulate(insert: bool = True, autotimestep: bool = True, timestep=None) -> N
     solver = study.GetSolver()
     _select_processor(solver=solver, processor=PROCESSOR)
 
-    if not autotimestep:
-        if not timestep:
-            solver.SetUseFixedTimestep(True)
-            solver.SetFixedTimestep(1e-6, "s")
-        else:
-            solver.SetUseFixedTimestep(True)
-            solver.SetFixedTimestep(timestep, "s")
+    if autotimestep:
+        solver.SetTimestepModel("variable")
+    else:
+        solver.SetTimestepModel("constant")
 
     if insert:
         runtime = T_FILL + T_SETTLE + T_COMPRESSION

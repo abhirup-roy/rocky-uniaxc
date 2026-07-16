@@ -220,7 +220,11 @@ class Settings:
             )
 
         # --- Enum-like string fields ---
-        valid_normal = {"linear_hysteresis", "hertz", "linear_spring"}
+        valid_normal = {
+            "linear_hysteresis",
+            "linear_elastic_viscous",
+            "damped_hertzian",
+        }
         if self.normal_force_model not in valid_normal:
             errors.append(
                 f"'normal_force_model' must be one of {valid_normal}, "
@@ -773,7 +777,7 @@ class UniaxialCompressionSimulation:
         if self.settings.adhesion_model != "none":
             contacts_data.EnableIncludeAdhesiveContacts()
 
-    def simulate(self, insert: bool = True) -> None:
+    def simulate(self, insert: bool = True, autotimestep: bool = True) -> None:
         """Run the simulation to completion.
 
         Args:
@@ -782,6 +786,11 @@ class UniaxialCompressionSimulation:
         """
         solver = self._study.GetSolver()
         self._select_processor(solver)
+
+        if autotimestep:
+            solver.SetTimestepModel("variable")
+        else:
+            solver.SetTimestepModel("constant")
 
         p = self.settings
         phases = (
