@@ -128,8 +128,11 @@ class SimParams:
         )
 
     def __post_init__(self):
-        if self.adhesion == "JKR" and self.normal != "hertz":
-            raise ValueError("JKR adhesion model requires Hertz normal force model")
+        if self.adhesion == "JKR" and self.normal != "damped_hertzian":
+            raise ValueError(
+                "JKR adhesion model requires Hertz normal force model"
+                "- use 'damped_hertzian' for normal contact model"
+            )
 
     @classmethod
     def from_tuple(cls, params: tuple, shape: ShapeConfig | dict) -> SimParams:
