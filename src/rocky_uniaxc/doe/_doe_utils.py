@@ -188,6 +188,8 @@ def resolve_base_params(params: dict) -> dict:
     Returns:
         Flat dict mapping canonical parameter names to their base values.
     """
+    shape = ShapeConfig.from_dict(params["shape"])
+
     return {
         "radius": params["particle_properties"]["radius"],
         "density": params["particle_properties"]["density"],
@@ -210,11 +212,11 @@ def resolve_base_params(params: dict) -> dict:
         "tangential": params["contact_model"]["tangential"],
         "rolling": params["contact_model"]["rolling"],
         "adhesion": params["contact_model"]["adhesion"],
-        "shape": params["shape"]["name"],
-        "vert_ar": params["shape"]["vert_ar"],
-        "horiz_ar": params["shape"]["horiz_ar"],
-        "n_corners": params["shape"]["n_corners"],
-        "sq_degree": params["shape"]["sq_degree"],
+        "shape": shape.name,
+        "vert_ar": shape.vert_ar,
+        "horiz_ar": shape.horiz_ar,
+        "n_corners": shape.n_corners,
+        "sq_degree": shape.sq_degree,
     }
 
 
