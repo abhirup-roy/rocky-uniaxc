@@ -70,7 +70,7 @@ class Shape:
         self.vert_ar = vert_ar
         self.horiz_ar = horiz_ar
         self.smoothness = smoothness
-        self.n_corners = n_corners
+        self.n_corners = int(n_corners) if n_corners is not None else None
         self.sq_degree = sq_degree
 
         if shape_type not in [
