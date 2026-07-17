@@ -1,5 +1,7 @@
 """Tests for Sobol / Latin Hypercube space-filling DOE generation."""
 
+import json
+
 import pytest
 from scipy.stats import qmc
 
@@ -36,6 +38,26 @@ class TestSampleSpaceFilling:
 
 
 class TestIterSpaceFilling:
+    def test_sphere_uses_default_shape_parameters(self, ofat_json, tmp_path):
+        config = json.loads(tmp_path.joinpath(ofat_json).read_text())
+        config["shape"] = {"name": "sphere"}
+        json_path = tmp_path / "sphere.json"
+        json_path.write_text(json.dumps(config))
+
+        params = iter_space_filling(
+            str(json_path),
+            ["cor_pp"],
+            [(0.1, 0.9)],
+            n_samples=1,
+            sampler=qmc.LatinHypercube(d=1, seed=0),
+        )
+
+        assert params[0].shape.name == "sphere"
+        assert params[0].shape.vert_ar == 1.0
+        assert params[0].shape.horiz_ar == 1.0
+        assert params[0].shape.n_corners == 6
+        assert params[0].shape.sq_degree == 2.0
+
     def test_builds_sim_params_in_bounds(self, ofat_json):
         factors = ["cor_pp", "youngmod"]
         bounds = [(0.1, 0.9), (1e6, 1e7)]
