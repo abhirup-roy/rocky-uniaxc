@@ -11,6 +11,7 @@ configuration (same schema as the OFAT config, see :mod:`rocky_uniaxc.doe.ofat`)
 """
 
 import json
+import warnings
 from collections import OrderedDict
 from typing import Optional
 
@@ -49,6 +50,107 @@ def sample_space_filling(
     l_bounds = [b[0] for b in bounds]
     u_bounds = [b[1] for b in bounds]
     return qmc.scale(unit_sample, l_bounds, u_bounds)
+
+
+def augment_lhs(
+    X,
+    lower,
+    upper,
+    target_size: int,
+    seed: int = 1234,
+    trials: int = 1000,
+    strict: bool = True,
+) -> np.ndarray:
+    """Add points that fill empty strata in an existing Latin hypercube.
+
+    The existing points are normalized using the original design bounds. Of
+    the feasible augmentations, the one with the lowest centered discrepancy
+    across ``trials`` random candidates is returned.
+
+    Args:
+        X: Existing sample with shape ``(n_samples, n_variables)``.
+        lower: Original lower bound for each variable.
+        upper: Original upper bound for each variable.
+        target_size: Desired total number of points after augmentation.
+        seed: Seed for reproducible candidate generation.
+        trials: Number of candidate augmentations to compare.
+        strict: Require the combined design to be an exact Latin hypercube.
+
+    Returns:
+        The new points only, with shape
+        ``(target_size - n_samples, n_variables)``.
+
+    Raises:
+        ValueError: If the inputs are invalid or strict augmentation is
+            impossible because existing points share a target-size stratum.
+    """
+    X = np.asarray(X, dtype=float)
+    lower = np.asarray(lower, dtype=float)
+    upper = np.asarray(upper, dtype=float)
+
+    if X.ndim != 2:
+        raise ValueError("X must be a two-dimensional array")
+
+    n, d = X.shape
+    if lower.shape != (d,) or upper.shape != (d,):
+        raise ValueError("lower and upper must contain one bound per variable")
+    if np.any(lower >= upper):
+        raise ValueError("Each lower bound must be less than its upper bound")
+    if target_size <= n:
+        raise ValueError("target_size must exceed the existing sample count")
+    if trials <= 0:
+        raise ValueError("trials must be positive")
+
+    unit_existing = (X - lower) / (upper - lower)
+    if np.any(~np.isfinite(unit_existing)) or np.any(
+        (unit_existing < 0) | (unit_existing > 1)
+    ):
+        raise ValueError("Some existing points lie outside the supplied bounds")
+
+    occupied = []
+    all_bins = np.arange(target_size)
+    for column in range(d):
+        bins = np.floor(
+            np.minimum(unit_existing[:, column], np.nextafter(1.0, 0.0))
+            * target_size
+        ).astype(int)
+        collisions = n - len(np.unique(bins))
+        if collisions:
+            message = (
+                f"Column {column}: {collisions} unavoidable stratum collision(s) "
+                "among the existing points."
+            )
+            if strict:
+                raise ValueError(message)
+            warnings.warn(
+                message + " Producing the closest feasible augmentation.",
+                UserWarning,
+                stacklevel=2,
+            )
+        occupied.append(bins)
+
+    rng = np.random.default_rng(seed)
+    n_new = target_size - n
+    best_new = None
+    best_score = np.inf
+
+    for _ in range(trials):
+        unit_new = np.empty((n_new, d))
+        for column in range(d):
+            missing = np.setdiff1d(all_bins, occupied[column])
+            if len(missing) > n_new:
+                missing = rng.choice(missing, size=n_new, replace=False)
+            values = (missing + rng.random(n_new)) / target_size
+            unit_new[:, column] = rng.permutation(values)
+
+        score = qmc.discrepancy(
+            np.vstack((unit_existing, unit_new)), method="CD"
+        )
+        if score < best_score:
+            best_score = score
+            best_new = unit_new.copy()
+
+    return lower + best_new * (upper - lower)
 
 
 def _build_sim_params(flat: dict) -> SimParams:
