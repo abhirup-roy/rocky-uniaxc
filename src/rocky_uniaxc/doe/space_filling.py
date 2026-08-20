@@ -188,6 +188,47 @@ def _build_sim_params(flat: dict) -> SimParams:
     )
 
 
+def _space_filling_base(
+    json_path: str,
+    factors: list[str],
+    bounds: list[tuple[float, float]],
+) -> dict:
+    """Load and validate the shared base parameters for a sampled design."""
+    if len(factors) != len(bounds):
+        raise ValueError("factors and bounds must have the same length")
+
+    with open(json_path, "r") as f_params:
+        params = json.load(f_params, object_pairs_hook=OrderedDict)
+    base = resolve_base_params(params)
+
+    unknown = [f for f in factors if f not in base]
+    if unknown:
+        allowed = [k for k in base if k not in _CATEGORICAL]
+        raise ValueError(f"Unknown factors {unknown}. Allowed factors: {allowed}")
+
+    categorical = [f for f in factors if f in _CATEGORICAL]
+    if categorical:
+        raise ValueError(f"Cannot space-fill categorical factors {categorical}")
+
+    for factor, (lower, upper) in zip(factors, bounds):
+        if lower >= upper:
+            raise ValueError(
+                f"Invalid bounds for '{factor}': ({lower}, {upper})"
+            )
+    return base
+
+
+def _sample_params(
+    base: dict, factors: list[str], samples: np.ndarray
+) -> list[SimParams]:
+    all_params = []
+    for row in samples:
+        flat = dict(base)
+        flat.update(zip(factors, row))
+        all_params.append(_build_sim_params(flat))
+    return all_params
+
+
 def iter_space_filling(
     json_path: str,
     factors: list[str],
@@ -212,35 +253,33 @@ def iter_space_filling(
         ValueError: If ``factors``/``bounds`` lengths differ, a factor is
             unknown or categorical, or any bound is inverted.
     """
-    if len(factors) != len(bounds):
-        raise ValueError("factors and bounds must have the same length")
-
-    with open(json_path, "r") as f_params:
-        params = json.load(f_params, object_pairs_hook=OrderedDict)
-    base = resolve_base_params(params)
-
-    unknown = [f for f in factors if f not in base]
-    if unknown:
-        allowed = [k for k in base if k not in _CATEGORICAL]
-        raise ValueError(f"Unknown factors {unknown}. Allowed factors: {allowed}")
-
-    categorical = [f for f in factors if f in _CATEGORICAL]
-    if categorical:
-        raise ValueError(f"Cannot space-fill categorical factors {categorical}")
-
-    for f, (lo, hi) in zip(factors, bounds):
-        if lo >= hi:
-            raise ValueError(f"Invalid bounds for '{f}': ({lo}, {hi})")
-
+    base = _space_filling_base(json_path, factors, bounds)
     samples = sample_space_filling(bounds, n_samples, sampler=sampler)
+    return _sample_params(base, factors, samples)
 
-    all_params = []
-    for row in samples:
-        flat = dict(base)
-        for f, val in zip(factors, row):
-            flat[f] = val
-        all_params.append(_build_sim_params(flat))
-    return all_params
+
+def iter_lhs_augmentation(
+    json_path: str,
+    existing_points,
+    factors: list[str],
+    bounds: list[tuple[float, float]],
+    target_size: int,
+    seed: int = 1234,
+    trials: int = 1000,
+    strict: bool = True,
+) -> list[SimParams]:
+    """Build simulation parameters for only the new augmented-LHS points."""
+    base = _space_filling_base(json_path, factors, bounds)
+    new_points = augment_lhs(
+        existing_points,
+        [bound[0] for bound in bounds],
+        [bound[1] for bound in bounds],
+        target_size,
+        seed=seed,
+        trials=trials,
+        strict=strict,
+    )
+    return _sample_params(base, factors, new_points)
 
 
 def launch_space_filling(
@@ -291,6 +330,52 @@ def launch_space_filling(
     """
     all_params = iter_space_filling(
         json_path, factors, bounds, n_samples, sampler=sampler
+    )
+    launch_param_cases(
+        sweep_name,
+        scheduler,
+        all_params,
+        meshdir=meshdir,
+        template_dir=template_dir,
+        autolaunch=autolaunch,
+        target=target,
+        backend=backend,
+    )
+
+
+def launch_lhs_augmentation(
+    sweep_name: str,
+    scheduler,
+    json_path: str,
+    existing_points,
+    factors: list[str],
+    bounds: list[tuple[float, float]],
+    target_size: int,
+    seed: int = 1234,
+    trials: int = 1000,
+    strict: bool = True,
+    meshdir: str = "meshes",
+    template_dir=None,
+    autolaunch: bool = True,
+    target: str = "GPU",
+    backend: Optional[str] = None,
+) -> None:
+    """Generate and launch only the new points in an augmented LHS.
+
+    ``existing_points`` must contain the factor values from the original
+    design in the same column order as ``factors``. ``target_size`` is the
+    desired combined size, so only ``target_size - len(existing_points)``
+    cases are created and optionally submitted.
+    """
+    all_params = iter_lhs_augmentation(
+        json_path,
+        existing_points,
+        factors,
+        bounds,
+        target_size,
+        seed=seed,
+        trials=trials,
+        strict=strict,
     )
     launch_param_cases(
         sweep_name,
