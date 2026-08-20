@@ -15,6 +15,7 @@ __all__ = [
     "launch_sweep",
     "launch_ofat",
     "launch_space_filling",
+    "launch_lhs_augmentation",
     "launch_di_optimal",
     "analyse",
     "externals",
@@ -29,7 +30,7 @@ ROCKY_EXE_PATH = None
 import pathlib as _pathlib
 from .doe.sweep import launch_sweep
 from .doe.ofat import launch_ofat
-from .doe.space_filling import launch_space_filling
+from .doe.space_filling import launch_lhs_augmentation, launch_space_filling
 from .doe.di_optimal import launch_di_optimal
 from .utils import RockyScheduler
 # from .doe import med
