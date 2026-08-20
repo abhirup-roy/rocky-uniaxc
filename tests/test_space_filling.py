@@ -1,14 +1,19 @@
 """Tests for Sobol / Latin Hypercube space-filling DOE generation."""
 
 import json
+from unittest.mock import patch
 
+import numpy as np
 import pytest
 from scipy.stats import qmc
 
 from rocky_uniaxc.doe.space_filling import (
+    augment_lhs,
     iter_space_filling,
+    launch_lhs_augmentation,
     sample_space_filling,
 )
+from rocky_uniaxc.utils import RockyScheduler
 
 
 class TestSampleSpaceFilling:
@@ -35,6 +40,87 @@ class TestSampleSpaceFilling:
             [(0, 1)], 8, sampler=qmc.Sobol(d=1, scramble=True, seed=42)
         )
         assert (a == b).all()
+
+
+class TestAugmentLHS:
+    def test_fills_each_target_stratum_once(self):
+        existing = np.array([[0.05, 0.35], [0.45, 0.65], [0.75, 0.95]])
+
+        new = augment_lhs(existing, [0, 0], [1, 1], 5, seed=42, trials=20)
+
+        combined = np.vstack((existing, new))
+        assert new.shape == (2, 2)
+        for column in combined.T:
+            assert sorted((column * 5).astype(int)) == list(range(5))
+
+    def test_is_reproducible_in_original_bounds(self):
+        existing = np.array([[12.0], [18.0]])
+
+        a = augment_lhs(existing, [10], [20], 4, seed=42, trials=20)
+        b = augment_lhs(existing, [10], [20], 4, seed=42, trials=20)
+
+        np.testing.assert_array_equal(a, b)
+        assert np.all((10 <= a) & (a <= 20))
+
+    def test_collision_handling(self):
+        existing = np.array([[0.1], [0.15]])
+
+        with pytest.raises(ValueError, match="stratum collision"):
+            augment_lhs(existing, [0], [1], 4, trials=1)
+
+        with pytest.warns(UserWarning, match="closest feasible"):
+            new = augment_lhs(
+                existing, [0], [1], 4, trials=1, strict=False
+            )
+        assert new.shape == (2, 1)
+
+    @pytest.mark.parametrize(
+        ("kwargs", "message"),
+        [
+            ({"target_size": 2}, "target_size"),
+            ({"target_size": 3, "trials": 0}, "trials"),
+            ({"target_size": 3, "lower": [0, 0]}, "one bound"),
+        ],
+    )
+    def test_rejects_invalid_inputs(self, kwargs, message):
+        arguments = {
+            "X": np.array([[0.1], [0.8]]),
+            "lower": [0],
+            "upper": [1],
+            "target_size": 3,
+        }
+        arguments.update(kwargs)
+        with pytest.raises(ValueError, match=message):
+            augment_lhs(**arguments)
+
+    def test_rejects_points_outside_original_bounds(self):
+        with pytest.raises(ValueError, match="outside"):
+            augment_lhs([[2.0]], [0], [1], 2, trials=1)
+
+    def test_launches_only_new_points(self, tmp_path, ofat_json):
+        existing = np.array([[0.05], [0.45], [0.75]])
+
+        with patch(
+            "rocky_uniaxc.doe.space_filling.launch_param_cases"
+        ) as launch:
+            launch_lhs_augmentation(
+                sweep_name=str(tmp_path / "lhs_extension"),
+                scheduler=RockyScheduler.bb_cpu(),
+                json_path=ofat_json,
+                existing_points=existing,
+                factors=["cor_pp"],
+                bounds=[(0.0, 1.0)],
+                target_size=5,
+                seed=42,
+                trials=20,
+                autolaunch=False,
+            )
+
+        new_params = launch.call_args.args[2]
+        assert len(new_params) == 2
+        combined = np.append(existing[:, 0], [p.cor_pp for p in new_params])
+        assert sorted((combined * 5).astype(int)) == list(range(5))
+        assert launch.call_args.kwargs["autolaunch"] is False
 
 
 class TestIterSpaceFilling:
