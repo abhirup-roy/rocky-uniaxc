@@ -28,7 +28,11 @@ class cd:
 
 
 # Default command run inside each job to drive a single uniaxial case.
-DEFAULT_RUN_COMMAND = 'Rocky --script "script_uniax.py" --headless >> rocky.log'
+DEFAULT_RUN_COMMAND = (
+    'Rocky --script "script_uniax.py" --headless --ncpus="${SLURM_CPUS_ON_NODE}" >> rocky.log'
+    if os.environ.get("SLURM_CPUS_ON_NODE")
+    else 'Rocky --script "script_uniax.py" --headless >> rocky.log'
+)
 
 # Module-load / setup blocks reused by the cluster presets.
 _BEAR_COMMANDS = (
@@ -152,13 +156,16 @@ class RockyScheduler:
         )
 
     @classmethod
-    def bb_gpu(cls, ngpus=1, run_days=12, account=None, **kwargs):
+    def bb_gpu(cls, ngpus=1, run_days=2, account=None, **kwargs):
         """Preset for the University of Birmingham BlueBear GPU partition."""
         return cls(
             time=f"{run_days}-0",
             ntasks=1,
             gres=f"gpu:{ngpus}",
             qos="bbgpu",
+            cpus_per_gpu=4
+            if not kwargs.get("cpus_per_gpu")
+            else kwargs.get("cpus_per_gpu"),
             account=account,
             commands=_BEAR_COMMANDS,
             **kwargs,
@@ -167,14 +174,29 @@ class RockyScheduler:
     @classmethod
     def az_gpu(cls, ngpus=1, run_days=12, **kwargs):
         """Preset for SCP GPU partition."""
+
+        if not kwargs.get("partition"):
+            match run_days:
+                case n if n >= 14:
+                    partition = "vlong-gpu"
+                case n if n >= 2:
+                    partition = "long-gpu"
+                case _:
+                    partition = "medium-gpu"
+        else:
+            partition = kwargs.get("partition")
+
         return cls(
             shebang="#!/bin/sh",
             time=f"{run_days}-0",
             ntasks=1,
             gres=f"gpu:{ngpus}",
-            partition="gpu",
+            partition=partition,
             commands=_AZ_COMMANDS,
-            cpus_per_gpu=1,
+            cpus_per_gpu=4
+            if not kwargs.get("cpus_per_gpu")
+            else kwargs.get("cpus_per_gpu"),
+            constraints="[volta|ampere|hopper]",
             **kwargs,
         )
 

@@ -26,7 +26,7 @@ class TestGenerate:
         script = RockyScheduler.az_gpu(ngpus=2).generate(tmp_path).read_text()
         assert "#!/bin/sh" in script
         assert "--gres=gpu:2" in script
-        assert "--partition=gpu" in script
+        assert "--partition=long-gpu" in script
 
     def test_bb_gpu(self, tmp_path):
         script = RockyScheduler.bb_gpu(ngpus=1).generate(tmp_path).read_text()
